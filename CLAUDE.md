@@ -1,112 +1,165 @@
-# CLAUDE.md
+# CLAUDE.md — Panamarket PWA
 Codex will review your output once you are done.
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## Comportement de l'IA (règles permanentes)
 
-## 1. Think Before Coding
+### 1. Réfléchir avant de coder
+- Énoncer les hypothèses explicitement. Si ambigu, poser la question.
+- Si plusieurs interprétations existent, les présenter — ne pas choisir silencieusement.
+- Si une approche plus simple existe, la signaler.
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+### 2. Simplicité d'abord
+- Minimum de code qui résout le problème. Rien de spéculatif.
+- Pas de fonctionnalités au-delà de ce qui est demandé.
+- Pas d'abstractions pour du code à usage unique.
+- Si 200 lignes peuvent être 50, réécrire.
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+### 3. Changements chirurgicaux
+- Toucher uniquement ce qui est nécessaire.
+- Ne pas "améliorer" le code adjacent.
+- Respecter le style existant, même si on ferait différemment.
+- Si du code mort est repéré, le signaler — ne pas le supprimer.
 
-## 2. Simplicity First
+### 4. Exécution orientée objectif
+Pour les tâches multi-étapes, énoncer un plan bref :
+1. [Étape] → vérification : [check]
+2. [Étape] → vérification : [check]
 
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
----
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+### 5. Pédagogie
+Kelvin est stagiaire BUT3, débutant React/SQL. Expliquer brièvement les choix
+non évidents en commentaire dans le code.
 
 ---
 
 ## Contexte du projet
 
-**Projet :** PWA de gestion d'approvisionnement pour Panam'arket  
-**Panam'arket :** Épicerie urbaine parisienne (224 rue de Belleville, 75020), ~200 produits actifs, ~4 employés  
-**Stack :** React + Vite, Supabase (PostgreSQL), déployé sur Vercel  
-**Développeur :** Kelvin Uthayakumar — stagiaire BUT3 Informatique, débutant React/SQL  
+**Projet :** PWA de gestion d'inventaire et d'approvisionnement
+**Client :** Panam'arket — épicerie urbaine, 224 rue de Belleville, 75020 Paris
+**Employés :** ~4 personnes. Gérant : Christian Francis
+**Produits actifs :** ~50 références (catalogue évolutif, nouveaux produits fréquents)
+**Développeur :** Kelvin Uthayakumar — stagiaire BUT3 Informatique
+**Stack :** React 18 + Vite, Tailwind CSS v3, Supabase (PostgreSQL), déployé sur Netlify
+**Repo GitHub :** github.com/kelvinuthaya/panamarket (public)
 
-## Architecture
+---
+
+## Architecture des fichiers
 
 src/
-├── lib/supabase.js        # Client Supabase (ne pas modifier)
+├── lib/
+│   └── supabase.js           # Client Supabase — ne pas modifier
 ├── components/
-│   └── ProduitCard.jsx    # Carte produit réutilisable
+│   └── ProduitCard.jsx       # Carte produit réutilisable
 └── pages/
-├── Ruptures.jsx        # Module 1 — ruptures de stock
-├── Approvisionnement.jsx # Module 2 — liste de courses
-├── Caisse.jsx          # Module 3 — caisse simulée
-└── Dashboard.jsx       # Module 4 — statistiques
+    ├── Ruptures.jsx          # Module 1 — ruptures de stock (employé, mobile)
+    ├── Approvisionnement.jsx # Module 2 — liste de courses (manager, mobile)
+    ├── Caisse.jsx            # Module 3 — caisse simulée (employé, mobile)
+    └── Dashboard.jsx         # Module 4 — statistiques (manager, desktop)
+
+---
 
 ## Base de données Supabase
 
 Table `produits` :
-- `id` (int8, identity)
-- `code` (text) — code-barres EAN
-- `designation` (text) — nom du produit
-- `gamme` (text) — catégorie (Boissons énergétiques, Alcools, Confiseries, Snacks, Hygiène)
-- `st_actuel` (float4) — stock actuel
-- `st_min` (float4) — seuil minimum (rupture si st_actuel < st_min)
-- `pr_vente` (float4) — prix de vente
 
-## Conventions
+| Colonne    | Type           | Description                                      |
+|------------|----------------|--------------------------------------------------|
+| id         | int8, identity | Clé primaire auto-incrémentée                    |
+| code       | text           | Code-barres EAN13                                |
+| designation| text           | Nom du produit                                   |
+| gamme      | text           | Catégorie (Boissons énergétiques, Alcools, etc.) |
+| st_actuel  | float4         | Stock actuel en rayon                            |
+| st_min     | float4         | Seuil minimum — rupture si st_actuel < st_min    |
+| pr_vente   | float4         | Prix de vente en euros                           |
+
+Logique rupture :
+- st_actuel === 0 → Rupture totale (rouge) — commander en urgence
+- st_actuel > 0 && st_actuel < st_min → Stock insuffisant (orange) — planifier commande
+- st_actuel >= st_min → En stock (vert)
+
+URL Supabase : https://oiqguvuceghiokgpafca.supabase.co
+RLS : désactivé pour l'instant (à activer avec l'auth en semaine 5-6)
+
+---
+
+## Spécification fonctionnelle
+
+### Module 1 — Ruptures de stock
+Utilisateur : Employé (mobile)
+- Afficher la liste de tous les produits avec leur statut (rupture / insuffisant / ok)
+- Filtres : Tous / Rupture / Stock insuffisant / En stock
+- Bouton "Signaler rupture" sur chaque ProduitCard → update st_actuel dans Supabase
+- Scanner un code-barres produit avec la caméra pour retrouver un produit rapidement
+
+### Module 2 — Approvisionnement
+Utilisateur : Manager (mobile)
+- Consulter la liste des produits en rupture ou stock insuffisant
+- Générer une liste de courses dynamique (produits à commander)
+- Marquer un produit comme commandé / réapprovisionné
+
+### Module 3 — Caisse simulée
+Utilisateur : Employé (mobile)
+- Liste des produits avec compteurs de quantité (+/-)
+- Scanner un code-barres pour ajouter un produit hors liste
+- Total journalier en temps réel
+- Génération ticket PDF en fin de journée
+- Envoi du ticket par email
+- Sauvegarde pour suivi CA mensuel
+
+### Module 4 — Dashboard statistiques
+Utilisateur : Manager (desktop)
+- CA fictif jour par jour
+- CA mensuel cumulé avec graphique (Recharts)
+- Top 5 produits les plus vendus
+- Évolution mois par mois
+- Nombre de ruptures signalées par semaine
+
+### Fonctionnalités transversales
+- Authentification 2 rôles (employé / manager) via Supabase Auth
+- Gestion catalogue : ajout / modif / suppression produit par le manager
+- Ajout produit par scan code-barres
+- (Bonus) Ajout produit par photo via Claude API Vision
+- App installable sur téléphone (manifest.json PWA)
+- Navigation bottom bar mobile (4 onglets)
+- Responsive mobile-first sur toutes les pages
+
+---
+
+## Stack technique
+
+| Couche        | Technologie                        |
+|---------------|------------------------------------|
+| Front         | React 18 + Vite                    |
+| CSS           | Tailwind CSS v3                    |
+| Routing       | React Router v6                    |
+| Back          | Supabase (PostgreSQL + Auth)       |
+| Scan          | librairie barcode (à définir)      |
+| PDF           | librairie PDF (à définir)          |
+| Deploy        | Netlify                            |
+| Vision IA     | Claude API (bonus)                 |
+
+---
+
+## Conventions de code
 
 - CSS : Tailwind CSS v3 uniquement — pas de styles inline, pas de fichiers CSS séparés
 - Nommage : camelCase pour les props React, snake_case pour les colonnes Supabase
-- Composants : fonctionnels uniquement, pas de classes
-- Pédagogie : Kelvin apprend — expliquer brièvement les choix non évidents en commentaire
+- Composants : fonctionnels uniquement, pas de classes React
+- Imports : toujours en haut de fichier
+- Supabase : toujours destructurer { data, error }, toujours gérer l'erreur
 
-Je suis Kelvin, stagiaire BUT3 en développement d'une PWA 
-React + Supabase pour Panam'arket (épicerie urbaine).
-Stack : React + Vite, Supabase, Vercel.
-Niveau : débutant React/SQL, bases JS/Python.
-Tuteur technique : Claude, pédagogie progressive.
-Objectif : app fonctionnelle en 8 semaines.
-Lors des sessions de travail pratique, ne donner jamais une seule instruction à la fois. Toujours grouper 3 à 5 étapes consécutives dans chaque réponse pour éviter les échanges inutiles de confirmation. Réserver les étapes courtes uniquement quand une décision ou un choix de l'utilisateur est réellement nécessaire.
+---
+
+## Design system
+
+- Palette : fond gris très léger (#F9FAFB), blanc pour les cards
+- Vert (#1D9E75) : couleur principale, actions, succès
+- Bleu (#378ADD) : informations
+- Orange (#F59E0B) : stock insuffisant
+- Rouge (#EF4444) : rupture totale, danger
+- Cards : fond blanc, border gris léger, border-radius 12px, shadow légère
+- Mobile-first : optimisé pour utilisation à une main en rayon
+- Navigation : bottom bar fixe sur mobile, 4 onglets (Ruptures, Appro, Caisse, Dashboard)
+- Pas de gradients lourds, pas de shadows excessives
