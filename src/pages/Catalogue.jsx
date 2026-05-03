@@ -318,7 +318,7 @@ export default function Catalogue() {
       {/* ── MODAL AJOUT / MODIFICATION ────────────────────────────────────── */}
       {modalOuvert && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center sm:justify-center"
+          className="fixed inset-0 z-[55] bg-black/40 flex items-end sm:items-center sm:justify-center"
           onClick={e => { if (e.target === e.currentTarget) fermerModal() }}
         >
           <div className="bg-white w-full max-h-[92vh] rounded-t-2xl sm:rounded-2xl sm:max-w-md flex flex-col">
@@ -333,8 +333,10 @@ export default function Catalogue() {
               </button>
             </div>
 
-            {/* Formulaire scrollable */}
-            <form onSubmit={sauvegarder} className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
+            {/* Formulaire — la form est flex-col ; seul le contenu interne défile */}
+            <form onSubmit={sauvegarder} className="flex-1 flex flex-col overflow-hidden">
+
+              <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
 
               {/* Désignation */}
               <div>
@@ -373,6 +375,12 @@ export default function Catalogue() {
                     type="text"
                     value={form.code}
                     onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (form.code.trim()) chercherSurOFF(form.code.trim())
+                      }
+                    }}
                     placeholder="Ex : 9002490100070"
                     className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75] font-mono"
                   />
@@ -460,8 +468,10 @@ export default function Catalogue() {
                 />
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-2 pb-2">
+              </div>{/* fin zone scrollable */}
+
+              {/* Boutons — footer fixe, pb-16 = hauteur de la bottom nav, sm:pb-5 sur desktop */}
+              <div className="flex gap-3 px-4 pt-3 pb-16 sm:pb-5 border-t border-gray-100 shrink-0">
                 <button
                   type="button"
                   onClick={fermerModal}

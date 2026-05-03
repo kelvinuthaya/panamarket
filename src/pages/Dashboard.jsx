@@ -65,22 +65,22 @@ export default function Dashboard() {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 
-  const quantitesAujourdhui = useMemo(() => {
+  const transactionsAujourdhui = useMemo(() => {
     const caisse = lireCaisse(today)
-    // Log temporaire — à retirer une fois la caisse en production
-    console.log(`[Dashboard] localStorage caisse_${today} :`, caisse ?? '(vide)')
-    return caisse?.quantites ?? {}
+    return caisse?.transactions ?? []
   }, [today])
 
   // ── Métriques du jour ──────────────────────────────────────────────────────
   const caAujourdhui = useMemo(() =>
-    produits.reduce((sum, p) => sum + (quantitesAujourdhui[p.id] ?? 0) * p.pr_vente, 0),
-    [produits, quantitesAujourdhui]
+    transactionsAujourdhui.reduce((sum, t) => sum + t.total, 0),
+    [transactionsAujourdhui]
   )
 
   const nbArticlesVendus = useMemo(() =>
-    Object.values(quantitesAujourdhui).reduce((sum, q) => sum + q, 0),
-    [quantitesAujourdhui]
+    transactionsAujourdhui.reduce((sum, t) =>
+      sum + t.produits.reduce((s, p) => s + p.quantite, 0), 0
+    ),
+    [transactionsAujourdhui]
   )
 
   const nbRuptures = useMemo(() =>
@@ -97,28 +97,29 @@ export default function Dashboard() {
   const donneesGraphique = useMemo(() =>
     derniersSeptJours().map(date => {
       const caisse = lireCaisse(date)
-      if (!caisse || !produits.length) return { date: formatDate(date), ca: 0 }
-      const ca = produits.reduce(
-        (sum, p) => sum + (caisse.quantites?.[p.id] ?? 0) * p.pr_vente, 0
-      )
+      const ca = (caisse?.transactions ?? []).reduce((sum, t) => sum + t.total, 0)
       return { date: formatDate(date), ca: parseFloat(ca.toFixed(2)) }
     }),
-    [produits]
+    []
   )
 
   // ── Top 5 produits du jour ─────────────────────────────────────────────────
-  const top5 = useMemo(() =>
-    produits
-      .map(p => ({
-        ...p,
-        qte: quantitesAujourdhui[p.id] ?? 0,
-        ca: (quantitesAujourdhui[p.id] ?? 0) * p.pr_vente,
-      }))
-      .filter(p => p.qte > 0)
+  const top5 = useMemo(() => {
+    const totals = {}
+    transactionsAujourdhui.forEach(t => {
+      t.produits.forEach(p => {
+        if (!totals[p.designation]) {
+          totals[p.designation] = { designation: p.designation, qte: 0, ca: 0 }
+        }
+        totals[p.designation].qte += p.quantite
+        totals[p.designation].ca  += p.quantite * p.prixUnitaire
+      })
+    })
+    return Object.values(totals)
       .sort((a, b) => b.qte - a.qte)
-      .slice(0, 5),
-    [produits, quantitesAujourdhui]
-  )
+      .slice(0, 5)
+      .map(p => ({ ...p, ca: parseFloat(p.ca.toFixed(2)) }))
+  }, [transactionsAujourdhui])
 
   // ── Alertes stocks (rupture + insuffisant) ─────────────────────────────────
   const alertesStock = useMemo(() =>
@@ -252,7 +253,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-3">
                 {top5.map((p, i) => (
-                  <div key={p.id} className="flex items-center gap-3">
+                  <div key={p.designation} className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">
                       {i + 1}
                     </span>
