@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Html5Qrcode } from 'html5-qrcode'
+import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Search, Pencil, Trash2, ScanLine, X, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, ScanLine, X, AlertTriangle, Loader2 } from 'lucide-react'
 
 const GAMMES = [
   'Boissons énergétiques', 'Alcools', 'Confiseries',
@@ -13,6 +13,28 @@ const GAMMES = [
 const FORM_VIDE = {
   designation: '', gamme: 'Boissons énergétiques',
   code: '', st_actuel: '', st_min: '', pr_vente: '',
+}
+
+// Traduit les categories_tags Open Food Facts vers nos 6 gammes
+function detecterGamme(categoriesTags = []) {
+  const cats = categoriesTags.map(c => c.toLowerCase())
+  if (cats.some(c => c.includes('energy-drink'))) return 'Boissons énergétiques'
+  if (cats.some(c =>
+    c.includes('alcohol') || c.includes('beer') || c.includes('wine') ||
+    c.includes('spirit') || c.includes('liqueur') || c.includes('aperitif')
+  )) return 'Alcools'
+  if (cats.some(c =>
+    c.includes('confection') || c.includes('candy') || c.includes('chocolate') ||
+    c.includes('biscuit') || c.includes('sweet') || c.includes('bonbon')
+  )) return 'Confiseries'
+  if (cats.some(c =>
+    c.includes('snack') || c.includes('chip') || c.includes('crisp') || c.includes('nuts')
+  )) return 'Snacks'
+  if (cats.some(c =>
+    c.includes('hygiene') || c.includes('personal-care') ||
+    c.includes('cosmetic') || c.includes('soap') || c.includes('shampoo')
+  )) return 'Hygiène'
+  return 'Autres'
 }
 
 export default function Catalogue() {
@@ -34,7 +56,12 @@ export default function Catalogue() {
 
   // Scanner
   const [scannerOuvert, setScannerOuvert] = useState(false)
-  const scannerRef = useRef(null)
+  const videoRef  = useRef(null) // élément <video> fourni à ZXing
+  const readerRef = useRef(null) // instance BrowserMultiFormatReader en cours
+
+  // Open Food Facts
+  const [offLoading, setOffLoading] = useState(false)
+  const [offMessage, setOffMessage] = useState('')
 
   // ── Accès ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -58,56 +85,79 @@ export default function Catalogue() {
     setLoading(false)
   }
 
-  // ── Scanner ───────────────────────────────────────────────────────────────
-  // 50 ms de délai pour absorber le double-fire de useEffect en StrictMode (dev).
-  // En production, StrictMode ne double-fire pas → le délai est invisible.
+  // ── Scanner ZXing ─────────────────────────────────────────────────────────
+  // Délai 50 ms : attend que React ait monté le <video> dans le DOM avant de
+  // passer la ref à ZXing. Aussi absorbe le double-fire de StrictMode en dev.
   useEffect(() => {
     if (!scannerOuvert) return
 
     let cancelled = false
-    let scanner = null
 
-    const timer = setTimeout(async () => {
-      if (cancelled) return
-      try {
-        scanner = new Html5Qrcode('qr-reader')
-        scannerRef.current = scanner
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 100 } },
-          (code) => {
-            if (cancelled) return
-            setForm(f => ({ ...f, code }))
-            cancelled = true
-            scanner.stop()
-              .then(() => { try { scanner.clear() } catch {} })
-              .catch(() => {})
-            scannerRef.current = null
-            setScannerOuvert(false)
-          },
-          () => {} // erreurs de frame ignorées
-        )
-      } catch (err) {
+    const timer = setTimeout(() => {
+      if (cancelled || !videoRef.current) return
+
+      const reader = new BrowserMultiFormatReader()
+      readerRef.current = reader
+
+      reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } } },
+        videoRef.current,
+        (result) => {
+          if (!result || cancelled) return
+          cancelled = true
+          reader.reset()
+          readerRef.current = null
+          setScannerOuvert(false)
+
+          const code = result.getText()
+          setForm(f => ({ ...f, code }))
+          setOffMessage('')
+          chercherSurOFF(code) // fire-and-forget, gère son propre loading state
+        }
+      ).catch(err => {
         console.error('[Scan] Caméra inaccessible :', err)
         if (!cancelled) setScannerOuvert(false)
-      }
+      })
     }, 50)
 
     return () => {
       cancelled = true
       clearTimeout(timer)
-      if (scanner?.isScanning) {
-        scanner.stop()
-          .then(() => { try { scanner.clear() } catch {} })
-          .catch(() => {})
+      if (readerRef.current) {
+        readerRef.current.reset()
+        readerRef.current = null
       }
-      scannerRef.current = null
     }
   }, [scannerOuvert])
 
-  // ── Fermer modal (stop scanner d'abord) ───────────────────────────────────
+  // ── Open Food Facts ───────────────────────────────────────────────────────
+  async function chercherSurOFF(code) {
+    setOffLoading(true)
+    setOffMessage('')
+    try {
+      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
+      const data = await res.json()
+      if (data.status === 1) {
+        const p = data.product
+        setForm(f => ({
+          ...f,
+          designation: p.product_name || f.designation,
+          gamme:       detecterGamme(p.categories_tags),
+        }))
+      } else {
+        setOffMessage('Produit non trouvé dans la base Open Food Facts')
+      }
+    } catch {
+      setOffMessage('Erreur lors de la recherche Open Food Facts')
+    } finally {
+      setOffLoading(false)
+    }
+  }
+
+  // ── Fermer modal ──────────────────────────────────────────────────────────
   function fermerModal() {
     setScannerOuvert(false)
+    setOffMessage('')
     setModalOuvert(false)
   }
 
@@ -116,6 +166,7 @@ export default function Catalogue() {
     setProduitEnCours(null)
     setForm(FORM_VIDE)
     setScannerOuvert(false)
+    setOffMessage('')
     setModalOuvert(true)
   }
 
@@ -130,6 +181,7 @@ export default function Catalogue() {
       pr_vente:    p.pr_vente ?? '',
     })
     setScannerOuvert(false)
+    setOffMessage('')
     setModalOuvert(true)
   }
 
@@ -338,14 +390,28 @@ export default function Catalogue() {
                   </button>
                 </div>
 
-                {/* Zone caméra — html5-qrcode injecte le flux vidéo dans ce div via son id */}
+                {/* Zone caméra — ZXing lit le flux depuis la balise <video> */}
                 {scannerOuvert && (
                   <div className="mt-2 rounded-xl overflow-hidden border border-[#1D9E75]/30 bg-black">
-                    <div id="qr-reader" className="w-full" />
+                    {/* playsInline obligatoire sur iOS Safari pour éviter le plein-écran */}
+                    <video ref={videoRef} className="w-full" playsInline muted />
                     <p className="text-center text-xs text-gray-400 py-2 bg-white border-t border-gray-100">
                       Pointez la caméra vers le code-barres
                     </p>
                   </div>
+                )}
+
+                {/* Chargement Open Food Facts */}
+                {offLoading && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                    <Loader2 size={14} className="animate-spin text-[#1D9E75]" />
+                    Recherche Open Food Facts…
+                  </div>
+                )}
+
+                {/* Message résultat OFF (non trouvé ou erreur) */}
+                {offMessage && (
+                  <p className="mt-2 text-xs text-orange-500">{offMessage}</p>
                 )}
               </div>
 
