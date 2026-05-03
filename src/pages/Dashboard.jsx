@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { TrendingUp, ShoppingBag, AlertTriangle, AlertCircle } from 'lucide-react'
+import { TrendingUp, ShoppingBag, AlertTriangle, AlertCircle, Package } from 'lucide-react'
 
 // Génère les 7 derniers jours (aujourd'hui inclus), format YYYY-MM-DD
 function derniersSeptJours() {
@@ -177,6 +177,23 @@ export default function Dashboard() {
             Icon={AlertCircle}
           />
         </div>
+
+        {/* Accès rapide catalogue */}
+        <Link
+          to="/catalogue"
+          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 hover:border-[#1D9E75]/40 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#1D9E75]/10 flex items-center justify-center">
+              <Package size={18} className="text-[#1D9E75]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Gérer le catalogue</p>
+              <p className="text-xs text-gray-400">Ajouter, modifier ou supprimer des produits</p>
+            </div>
+          </div>
+          <span className="text-gray-300 text-lg leading-none">›</span>
+        </Link>
 
         {/* Bandeau info quand aucune vente du jour dans localStorage */}
         {nbArticlesVendus === 0 && (

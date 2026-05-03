@@ -4,6 +4,7 @@ import Ruptures from './pages/Ruptures'
 import Approvisionnement from './pages/Approvisionnement'
 import Caisse from './pages/Caisse'
 import Dashboard from './pages/Dashboard'
+import Catalogue from './pages/Catalogue'
 import Login from './pages/Login'
 import BottomNav from './components/BottomNav'
 
@@ -33,6 +34,7 @@ function AppRoutes() {
           <Route path="/approvisionnement" element={<Approvisionnement />} />
           <Route path="/caisse" element={<Caisse />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/catalogue" element={<Catalogue />} />
           <Route path="*" element={<Navigate to="/ruptures" replace />} />
         </Routes>
       </main>

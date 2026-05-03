@@ -13,7 +13,10 @@ export function AuthProvider({ children }) {
     // (pattern recommandé Supabase v2 — évite la promesse getSession qui peut bloquer silencieusement)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[Auth]', event, session?.user?.email ?? 'aucun utilisateur')
-      setUser(session?.user ?? null)
+      const u = session?.user ?? null
+      setUser(u)
+      // Log temporaire pour débugger la structure des métadonnées Supabase
+      if (u) console.log('[Auth] user_metadata :', u.user_metadata, '| app_metadata :', u.app_metadata)
       // loading passe à false dès qu'on connaît l'état initial (INITIAL_SESSION)
       setLoading(false)
     })
@@ -26,7 +29,9 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user,
-      role: user?.user_metadata?.role ?? null,
+      // Supabase stocke le rôle dans user_metadata (signup) ou app_metadata (admin dashboard)
+      // On lit les deux pour couvrir les deux cas
+      role: user?.user_metadata?.role ?? user?.app_metadata?.role ?? null,
       isAuthenticated: !!user,
       loading,
       logout,
