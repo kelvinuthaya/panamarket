@@ -10,7 +10,10 @@ const badgeLabels = {
   ok: 'En stock',
 }
 
-const ProduitCard = ({ designation, gamme, stActuel, stMin, statut }) => {
+// onSignalerRupture : fonction appelée quand l'employé appuie sur le bouton
+const ProduitCard = ({ designation, gamme, stActuel, stMin, statut, onSignalerRupture }) => {
+  const enRupture = statut === 'rupture' // st_actuel === 0
+
   return (
     <div className="w-full bg-white rounded-2xl shadow-md p-6 flex flex-col gap-2">
       <p className="text-xs text-gray-400 uppercase tracking-wide">{gamme}</p>
@@ -26,6 +29,19 @@ const ProduitCard = ({ designation, gamme, stActuel, stMin, statut }) => {
       </div>
 
       <p className="text-xs text-gray-400">Stock minimum : {stMin}</p>
+
+      {/* Bouton désactivé si déjà en rupture — inutile de signaler à nouveau */}
+      <button
+        onClick={onSignalerRupture}
+        disabled={enRupture}
+        className={`mt-2 w-full py-2 rounded-xl text-sm font-semibold transition-colors ${
+          enRupture
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700'
+        }`}
+      >
+        {enRupture ? 'Déjà en rupture' : 'Signaler rupture'}
+      </button>
     </div>
   )
 }

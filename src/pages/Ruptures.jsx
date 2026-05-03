@@ -37,6 +37,13 @@ const Ruptures = () => {
     fetchProduits()
   }, [])
 
+  // Met st_actuel à 0 dans Supabase, puis met à jour l'état local sans re-fetch
+  const signalerRupture = async (id) => {
+    const { error } = await supabase.from('produits').update({ st_actuel: 0 }).eq('id', id)
+    if (error) { console.error(error); return }
+    setProduits(prev => prev.map(p => p.id === id ? { ...p, st_actuel: 0 } : p))
+  }
+
   const produitsFiltres = produits.filter((p) =>
     filtre === 'tous' ? true : getStatut(p) === filtre
   )
@@ -76,6 +83,7 @@ const Ruptures = () => {
             stActuel={p.st_actuel}
             stMin={p.st_min}
             statut={getStatut(p)}
+            onSignalerRupture={() => signalerRupture(p.id)}
           />
         ))}
       </div>
