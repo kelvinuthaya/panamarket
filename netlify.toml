@@ -1,0 +1,19 @@
+# netlify.toml — configuration de déploiement Netlify pour React + Vite
+#
+# Ce fichier indique à Netlify comment builder et servir l'application.
+# Il est lu automatiquement lors du déploiement (via GitHub ou Netlify CLI).
+
+[build]
+  # Commande exécutée par Netlify pour construire l'app
+  command = "npm run build"
+
+  # Dossier que Netlify publie (généré par Vite après le build)
+  publish = "dist"
+
+# Redirection pour le routing côté client (React Router)
+# Sans cette règle, recharger la page sur /ruptures renverrait une 404 Netlify.
+# On redirige toutes les URLs vers index.html et React Router prend le relais.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

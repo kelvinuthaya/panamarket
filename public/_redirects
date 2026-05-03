@@ -1,0 +1,7 @@
+# _redirects — règle de fallback pour React Router sur Netlify
+#
+# Quand l'utilisateur accède directement à une URL comme /caisse ou /dashboard,
+# le serveur Netlify cherche un fichier correspondant — qui n'existe pas (c'est React).
+# Cette ligne renvoie toujours index.html avec un code 200, laissant React Router
+# gérer la navigation. Sans ça, toutes les pages sauf / renvoient une 404.
+/*    /index.html   200
