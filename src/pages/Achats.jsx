@@ -369,6 +369,21 @@ const Reception = ({
     )
   }
 
+  const formatDLC = (val) => {
+    const digits = val.replace(/\D/g, '').slice(0, 8)
+    if (digits.length <= 2) return digits
+    if (digits.length <= 4) return digits.slice(0, 2) + '/' + digits.slice(2)
+    return digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4)
+  }
+
+  // Retourne true si la date est valide ou incomplète ; false si complète mais impossible
+  const isDLCValide = (val) => {
+    if (val.length < 10) return true
+    const [dd, mm, yyyy] = val.split('/').map(Number)
+    const d = new Date(yyyy, mm - 1, dd)
+    return d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd
+  }
+
   const updateQty = (produitId, val) => {
     const n = Math.max(1, Number(val))
     setReceptionItems(prev =>
@@ -443,23 +458,38 @@ const Reception = ({
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="text-xs text-gray-400 block mb-1.5">Quantité reçue</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.qtRecue}
-                      onChange={e => updateQty(item.produit.id, e.target.value)}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#1D9E75]"
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQty(item.produit.id, item.qtRecue - 1)}
+                        className="w-9 h-9 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 text-lg font-bold flex items-center justify-center active:bg-gray-100"
+                      >−</button>
+                      <span className="flex-1 text-center text-sm font-semibold text-gray-800">
+                        {item.qtRecue}
+                      </span>
+                      <button
+                        onClick={() => updateQty(item.produit.id, item.qtRecue + 1)}
+                        className="w-9 h-9 rounded-xl border border-[#1D9E75] bg-[#1D9E75]/10 text-[#1D9E75] text-lg font-bold flex items-center justify-center active:bg-[#1D9E75]/20"
+                      >+</button>
+                    </div>
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-gray-400 block mb-1.5">DLC (optionnel)</label>
                     <input
                       type="text"
+                      inputMode="numeric"
+                      maxLength="10"
                       value={item.dlc}
-                      onChange={e => updateDlc(item.produit.id, e.target.value)}
+                      onChange={e => updateDlc(item.produit.id, formatDLC(e.target.value))}
                       placeholder="JJ/MM/AAAA"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#1D9E75]"
+                      className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${
+                        isDLCValide(item.dlc)
+                          ? 'border-gray-200 focus:border-[#1D9E75]'
+                          : 'border-red-400 focus:border-red-400 bg-red-50'
+                      }`}
                     />
+                    {!isDLCValide(item.dlc) && (
+                      <p className="text-xs text-red-500 mt-1">Date impossible</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -473,7 +503,7 @@ const Reception = ({
         <div className="fixed bottom-16 left-0 right-0 px-4 pb-3">
           <button
             onClick={validerAchats}
-            disabled={validating}
+            disabled={validating || receptionItems.some(i => !isDLCValide(i.dlc))}
             className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-[#1D9E75] text-white py-3.5 rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 active:opacity-80"
           >
             {validating ? (
@@ -618,6 +648,76 @@ const Reception = ({
   )
 }
 
+// ─── Onglet Historique ────────────────────────────────────────────────────────
+
+function formaterDateLivraison(isoString) {
+  const d = new Date(isoString)
+  const datePart = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${datePart} à ${h}h${m}`
+}
+
+function formaterDlc(iso) {
+  const [aaaa, mm, jj] = iso.split('-')
+  return `${jj}/${mm}/${aaaa}`
+}
+
+function OngletHistorique({ historique }) {
+  if (historique.length === 0) {
+    return (
+      <div className="text-center py-16 text-gray-400">
+        <p className="text-4xl mb-3">📭</p>
+        <p className="font-medium text-gray-500">Aucune livraison enregistrée</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pb-20">
+      {historique.map(livraison => {
+        const lignes = livraison.stock_dlc ?? []
+        const nbProduits = lignes.length
+        return (
+          <div key={livraison.id} className="bg-white rounded-xl border border-gray-100 px-4 py-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">
+                  {formaterDateLivraison(livraison.created_at)}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {nbProduits} produit{nbProduits !== 1 ? 's' : ''} reçu{nbProduits !== 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            {lignes.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">Aucun produit avec DLC enregistré</p>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {lignes.map(ligne => (
+                  <div key={ligne.id} className="flex items-center justify-between py-2">
+                    <p className="text-sm text-gray-700 truncate flex-1 mr-3">
+                      {ligne.designation}
+                    </p>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {ligne.dlc && (
+                        <span className="text-xs text-gray-400">DLC {formaterDlc(ligne.dlc)}</span>
+                      )}
+                      <span className="text-xs font-semibold text-[#1D9E75]">
+                        ×{ligne.quantite}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Page principale Achats ───────────────────────────────────────────────────
 
 const Achats = () => {
@@ -629,6 +729,7 @@ const Achats = () => {
   const [loading, setLoading]                 = useState(true)
   const [validating, setValidating]           = useState(false)
   const [toast, setToast]                     = useState('')
+  const [historique, setHistorique]           = useState([])
 
   // Auto-dismiss du toast après 2.5 s
   useEffect(() => {
@@ -652,6 +753,15 @@ const Achats = () => {
     }
     fetchProduits()
   }, [])
+
+  useEffect(() => {
+    if (onglet !== 'historique') return
+    supabase
+      .from('livraisons')
+      .select('*, stock_dlc(*)')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setHistorique(data ?? []))
+  }, [onglet])
 
   // ── Cocher = ajouter à receptionItems ; décocher = retirer ───────────────
   const toggleCheck = (produitId) => {
@@ -685,6 +795,12 @@ const Achats = () => {
   }
 
   // ── Validation des achats ────────────────────────────────────────────────
+
+  function convertirDlc(dlcStr) {
+    const [jj, mm, aaaa] = dlcStr.split('/')
+    return `${aaaa}-${mm}-${jj}`
+  }
+
   const validerAchats = async () => {
     setValidating(true)
     try {
@@ -696,19 +812,36 @@ const Achats = () => {
           .eq('id', item.produit.id)
       }
 
-      // 2. Enregistrer la livraison
-      await supabase.from('livraisons').insert({
-        user_id:    user.id,
-        produits:   receptionItems.map(i => ({
-          id:          i.produit.id,
-          designation: i.produit.designation,
-          qt_recue:    i.qtRecue,
-          dlc:         i.dlc || null,
-        })),
-        created_at: new Date().toISOString(),
-      })
+      // 2. Créer la livraison
+      const { data: livraison, error: errLivraison } = await supabase
+        .from('livraisons')
+        .insert({ user_id: user?.id })
+        .select()
+        .single()
 
-      // 3. Reset
+      if (errLivraison || !livraison) {
+        console.error('Erreur création livraison', errLivraison)
+        setToast('Erreur lors de la validation')
+        setValidating(false)
+        return
+      }
+
+      // 3. Insérer les lignes DLC pour les items qui en ont une
+      const lignesDlc = receptionItems
+        .filter(item => item.dlc)
+        .map(item => ({
+          produit_id:  item.produit.id,
+          designation: item.produit.designation,
+          quantite:    item.qtRecue,
+          dlc:         convertirDlc(item.dlc),
+          livraison_id: livraison.id,
+        }))
+
+      if (lignesDlc.length > 0) {
+        await supabase.from('stock_dlc').insert(lignesDlc)
+      }
+
+      // 4. Reset
       setReceptionItems([])
       setListeCourses(prev => prev.map(i => ({ ...i, checked: false })))
       setToast('✓ Achats validés !')
@@ -767,11 +900,21 @@ const Achats = () => {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setOnglet('historique')}
+            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              onglet === 'historique'
+                ? 'bg-gray-900 text-white'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            🕐 Historique
+          </button>
         </div>
       </header>
 
       <div className="p-4 max-w-2xl mx-auto">
-        {onglet === 'liste' ? (
+        {onglet === 'liste' && (
           <ListeCourses
             listeCourses={listeCourses}
             setListeCourses={setListeCourses}
@@ -781,7 +924,8 @@ const Achats = () => {
             ajouterEtCocher={ajouterEtCocher}
             setOnglet={setOnglet}
           />
-        ) : (
+        )}
+        {onglet === 'reception' && (
           <Reception
             receptionItems={receptionItems}
             setReceptionItems={setReceptionItems}
@@ -790,6 +934,9 @@ const Achats = () => {
             validerAchats={validerAchats}
             validating={validating}
           />
+        )}
+        {onglet === 'historique' && (
+          <OngletHistorique historique={historique} />
         )}
       </div>
     </div>

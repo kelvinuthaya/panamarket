@@ -41,9 +41,10 @@ export default function Catalogue() {
   const { role, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
-  const [produits, setProduits]     = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [recherche, setRecherche]   = useState('')
+  const [produits, setProduits]           = useState([])
+  const [dlcParProduit, setDlcParProduit] = useState({})
+  const [loading, setLoading]             = useState(true)
+  const [recherche, setRecherche]         = useState('')
 
   // Modal add/edit
   const [modalOuvert, setModalOuvert]       = useState(false)
@@ -76,12 +77,22 @@ export default function Catalogue() {
   }, [])
 
   async function fetchProduits() {
-    const { data, error } = await supabase
-      .from('produits')
-      .select('id, code, designation, gamme, st_actuel, st_min, pr_vente')
-      .order('designation')
+    const [{ data, error }, { data: dlcData }] = await Promise.all([
+      supabase
+        .from('produits')
+        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente')
+        .order('designation'),
+      supabase.from('stock_dlc').select('*'),
+    ])
     if (error) console.error('[Catalogue] Supabase :', error.message)
     else setProduits(data)
+
+    const map = {}
+    dlcData?.forEach(entry => {
+      const existing = map[entry.produit_id]
+      if (!existing || entry.dlc < existing.dlc) map[entry.produit_id] = entry
+    })
+    setDlcParProduit(map)
     setLoading(false)
   }
 
@@ -274,11 +285,29 @@ export default function Catalogue() {
           <p className="text-center text-gray-400 mt-16 text-sm">Aucun produit trouvé.</p>
         )}
 
-        {produitsFiltres.map(p => (
+        {produitsFiltres.map(p => {
+          const dlcEntry = dlcParProduit[p.id]
+          const dlcBadge = dlcEntry ? (() => {
+            const [yyyy, mm, dd] = dlcEntry.dlc.split('-')
+            const label = `${dd}/${mm}/${yyyy}`
+            const today = new Date(); today.setHours(0, 0, 0, 0)
+            const dlcDate = new Date(dlcEntry.dlc); dlcDate.setHours(0, 0, 0, 0)
+            const jours = Math.ceil((dlcDate - today) / 86400000)
+            if (jours < 3)  return { label, cls: 'text-red-500',    prefix: '⚠️ DLC : ' }
+            if (jours < 14) return { label, cls: 'text-orange-500', prefix: '🕐 DLC : ' }
+            return              { label, cls: 'text-gray-400',    prefix: 'DLC : ' }
+          })() : null
+
+          return (
           <div key={p.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-800 truncate">{p.designation}</p>
+                {dlcBadge && (
+                  <p className={`text-xs mt-0.5 ${dlcBadge.cls}`}>
+                    {dlcBadge.prefix}{dlcBadge.label}
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 mt-0.5">{p.gamme}</p>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                   <span className="text-xs text-gray-500">
@@ -312,7 +341,8 @@ export default function Catalogue() {
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* ── MODAL AJOUT / MODIFICATION ────────────────────────────────────── */}
