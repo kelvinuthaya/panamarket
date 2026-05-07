@@ -35,11 +35,10 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── 2. Lire et parser le CSV ─────────────────────────────────────────────────
-// Format attendu (avec en-tête) :
-//   code,designation,gamme,st_actuel,st_min,pr_vente
-const csvPath = path.join(ROOT, 'produits_actifs.csv');
+// Nouveau fichier cible :
+const csvPath = path.join(ROOT, 'produits_enrichis.csv');
 if (!fs.existsSync(csvPath)) {
-  console.error('Fichier produits_actifs.csv introuvable à la racine du projet.');
+  console.error('Fichier produits_enrichis.csv introuvable à la racine du projet.');
   process.exit(1);
 }
 
@@ -51,28 +50,47 @@ const lines = fs.readFileSync(csvPath, 'utf8')
 const [headerLine, ...dataLines] = lines;
 const headers = headerLine.split(',').map(h => h.trim());
 
-// Colonnes numériques à convertir (float dans Supabase)
-const FLOAT_COLS = new Set(['st_actuel', 'st_min', 'pr_vente']);
-
 const produits = dataLines.map((line, i) => {
   const values = line.split(',').map(v => v.trim());
   if (values.length !== headers.length) {
     console.warn(`Ligne ${i + 2} ignorée (${values.length} colonnes, attendu ${headers.length}) : ${line}`);
     return null;
   }
-  const produit = {};
+  
+  // Associer temporairement les valeurs de la ligne aux en-têtes correspondants
+  const row = {};
   headers.forEach((col, idx) => {
-    produit[col] = FLOAT_COLS.has(col) ? parseFloat(values[idx]) : values[idx];
+    row[col] = values[idx];
   });
-  return produit;
+
+  // Construction de l'objet produit formaté pour Supabase
+  return {
+    designation: row.designation_pdf,
+    code: row.code_ean || '',
+    gamme: row.gamme || 'Autres',
+    st_actuel: 5,
+    st_min: 5,
+    pr_vente: parseFloat(row.pr_vente) || 0
+  };
 }).filter(Boolean);
 
 console.log(`\n${produits.length} produit(s) trouvé(s) dans le CSV.\n`);
 
-// ── 3. Insérer dans Supabase un par un pour un log précis ────────────────────
+// ── 3. Vider la table produits avant d'importer ──────────────────────────────
+console.log("Suppression des anciens produits de la table...");
+const { error: deleteError } = await supabase.from('produits').delete().neq('id', 0);
+
+if (deleteError) {
+  console.error("Erreur lors de la suppression des produits :", deleteError.message);
+  process.exit(1);
+}
+console.log("Table 'produits' vidée avec succès.\n");
+
+// ── 4. Insérer dans Supabase un par un pour un log précis ────────────────────
 let success = 0;
 let failure = 0;
 
+console.log("Début de l'importation...");
 for (const produit of produits) {
   const { error } = await supabase.from('produits').insert(produit);
   if (error) {
@@ -84,9 +102,9 @@ for (const produit of produits) {
   }
 }
 
-// ── 4. Résumé final ───────────────────────────────────────────────────────────
+// ── 5. Résumé final ───────────────────────────────────────────────────────────
 console.log('\n─────────────────────────────');
 console.log(`Import terminé : ${success} insérés, ${failure} erreur(s).`);
 if (failure > 0) {
-  console.log('Vérifiez les erreurs ci-dessus (doublons de code-barres, champ manquant…)');
+  console.log('Vérifiez les erreurs ci-dessus (doublons, type de donnée invalide…)');
 }

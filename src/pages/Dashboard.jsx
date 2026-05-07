@@ -7,80 +7,107 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { TrendingUp, ShoppingBag, AlertTriangle, AlertCircle, Package } from 'lucide-react'
 
-// Génère les 7 derniers jours (aujourd'hui inclus), format YYYY-MM-DD
-function derniersSeptJours() {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (6 - i))
-    return d.toISOString().slice(0, 10)
-  })
-}
-
-function lireCaisse(date) {
-  try {
-    const raw = localStorage.getItem(`caisse_${date}`)
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch { return null }
-}
-
-// YYYY-MM-DD → "jj/mm"
-function formatDate(date) {
-  const [, m, d] = date.split('-')
-  return `${d}/${m}`
-}
-
 export default function Dashboard() {
   const { role, loading: authLoading } = useAuth()
-  const navigate  = useNavigate()
-  const [produits, setProduits] = useState([])
-  const [loading, setLoading]   = useState(true)
+  const navigate = useNavigate()
+
+  const [produits, setProduits]               = useState([])
+  const [transactions, setTransactions]       = useState([])
+  const [loading, setLoading]                 = useState(true)
+  const [migrationFaite, setMigrationFaite]   = useState(false)
+  const [moisSelectionne, setMoisSelectionne] = useState(
+    new Date().toLocaleDateString('en-CA').slice(0, 7)
+  )
 
   // Redirection si rôle non autorisé (employé) — seulement une fois l'auth résolue
   useEffect(() => {
-    if (!authLoading && role && role !== 'manager' && role !== 'gérant') {
-      navigate('/ruptures', { replace: true })
+    if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
+      navigate('/catalogue', { replace: true })
     }
   }, [role, authLoading, navigate])
 
+  // Fetch transactions du mois + produits en parallèle, relancé à chaque changement de mois
   useEffect(() => {
-    async function fetchProduits() {
-      const { data, error } = await supabase
-        .from('produits')
-        .select('id, designation, gamme, st_actuel, st_min, pr_vente')
-        .order('designation')
-      if (error) {
-        console.error('[Dashboard] Erreur Supabase produits :', error.message)
-      } else {
-        setProduits(data)
-        console.log(`[Dashboard] ${data.length} produits chargés depuis Supabase`)
-      }
+    async function fetchData() {
+      const debutMois = new Date(moisSelectionne + '-01')
+      debutMois.setHours(0, 0, 0, 0)
+      const [annee, mois] = moisSelectionne.split('-').map(Number)
+      // new Date(y, m, 0) = dernier jour du mois m (m en base 1) car jour 0 = veille du 1er
+      const finMois = new Date(annee, mois, 0)
+      finMois.setHours(23, 59, 59, 999)
+
+      const [txnResult, produitsResult] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('total, created_at, produits')
+          .gte('created_at', debutMois.toISOString())
+          .lte('created_at', finMois.toISOString())
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('produits')
+          .select('id, designation, gamme, st_actuel, st_min, pr_vente')
+          .order('designation'),
+      ])
+
+      if (!txnResult.error)     setTransactions(txnResult.data ?? [])
+      if (!produitsResult.error) setProduits(produitsResult.data ?? [])
       setLoading(false)
     }
-    fetchProduits()
+    fetchData()
+  }, [moisSelectionne])
+
+  useEffect(() => {
+    if (localStorage.getItem('migration_v1_done')) setMigrationFaite(true)
   }, [])
 
-  const today = new Date().toISOString().slice(0, 10)
+  async function migrerLocalStorage() {
+    const cles = Object.keys(localStorage).filter(k => /^caisse_\d{4}-\d{2}-\d{2}$/.test(k))
+    if (cles.length === 0) { setMigrationFaite(true); return }
+
+    const inserts = []
+    for (const cle of cles) {
+      const dateStr = cle.replace('caisse_', '')
+      try {
+        const parsed = JSON.parse(localStorage.getItem(cle))
+        const txns = parsed.transactions ?? []
+        for (const t of txns) {
+          const [h, m] = (t.heure ?? '12:00').split(':')
+          const createdAt = new Date(`${dateStr}T${h.padStart(2, '0')}:${m.padStart(2, '0')}:00`)
+          inserts.push({
+            created_at: createdAt.toISOString(),
+            produits:   t.produits,
+            total:      parseFloat(t.total),
+            paiement:   t.paiement === 'cb' || t.paiement === 'especes' ? t.paiement : 'cb',
+          })
+        }
+      } catch {}
+    }
+
+    if (inserts.length > 0) {
+      const { error } = await supabase.from('transactions').insert(inserts)
+      if (error) { console.error('Migration erreur:', error); return }
+    }
+
+    localStorage.setItem('migration_v1_done', 'true')
+    setMigrationFaite(true)
+    alert(`Migration réussie — ${inserts.length} transaction(s) transférée(s) vers Supabase.`)
+  }
+
   const todayFr = new Date().toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
 
-  const transactionsAujourdhui = useMemo(() => {
-    const caisse = lireCaisse(today)
-    return caisse?.transactions ?? []
-  }, [today])
-
-  // ── Métriques du jour ──────────────────────────────────────────────────────
-  const caAujourdhui = useMemo(() =>
-    transactionsAujourdhui.reduce((sum, t) => sum + t.total, 0),
-    [transactionsAujourdhui]
+  // ── Métriques du mois sélectionné ─────────────────────────────────────────
+  const caMois = useMemo(() =>
+    transactions.reduce((sum, t) => sum + t.total, 0),
+    [transactions]
   )
 
-  const nbArticlesVendus = useMemo(() =>
-    transactionsAujourdhui.reduce((sum, t) =>
+  const articlesMois = useMemo(() =>
+    transactions.reduce((sum, t) =>
       sum + t.produits.reduce((s, p) => s + p.quantite, 0), 0
     ),
-    [transactionsAujourdhui]
+    [transactions]
   )
 
   const nbRuptures = useMemo(() =>
@@ -93,20 +120,23 @@ export default function Dashboard() {
     [produits]
   )
 
-  // ── Graphique CA 7 jours ──────────────────────────────────────────────────
-  const donneesGraphique = useMemo(() =>
-    derniersSeptJours().map(date => {
-      const caisse = lireCaisse(date)
-      const ca = (caisse?.transactions ?? []).reduce((sum, t) => sum + t.total, 0)
-      return { date: formatDate(date), ca: parseFloat(ca.toFixed(2)) }
-    }),
-    []
-  )
+  // ── Graphique CA jour par jour du mois sélectionné ────────────────────────
+  const donneesGraphique = useMemo(() => {
+    const parJour = {}
+    transactions.forEach(t => {
+      const d = new Date(t.created_at)
+      const jour = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+      parJour[jour] = (parJour[jour] ?? 0) + t.total
+    })
+    return Object.entries(parJour)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([jour, ca]) => ({ jour, ca: parseFloat(ca.toFixed(2)) }))
+  }, [transactions])
 
-  // ── Top 5 produits du jour ─────────────────────────────────────────────────
+  // ── Top 5 produits du mois ─────────────────────────────────────────────────
   const top5 = useMemo(() => {
     const totals = {}
-    transactionsAujourdhui.forEach(t => {
+    transactions.forEach(t => {
       t.produits.forEach(p => {
         if (!totals[p.designation]) {
           totals[p.designation] = { designation: p.designation, qte: 0, ca: 0 }
@@ -119,7 +149,7 @@ export default function Dashboard() {
       .sort((a, b) => b.qte - a.qte)
       .slice(0, 5)
       .map(p => ({ ...p, ca: parseFloat(p.ca.toFixed(2)) }))
-  }, [transactionsAujourdhui])
+  }, [transactions])
 
   // ── Alertes stocks (rupture + insuffisant) ─────────────────────────────────
   const alertesStock = useMemo(() =>
@@ -147,18 +177,28 @@ export default function Dashboard() {
 
       <div className="p-4 max-w-5xl mx-auto space-y-6">
 
+        {/* ── MIGRATION ONE-TIME ────────────────────────────────────────────── */}
+        {!migrationFaite && role === 'gerant' && (
+          <button
+            onClick={migrerLocalStorage}
+            className="w-full bg-orange-500 text-white py-3 rounded-xl text-sm font-semibold"
+          >
+            ⚠️ Migrer les données existantes vers Supabase (une seule fois)
+          </button>
+        )}
+
         {/* ── 4 CARDS MÉTRIQUES ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard
-            label="CA du jour"
-            value={`${caAujourdhui.toFixed(2)} €`}
+            label="CA du mois"
+            value={`${caMois.toFixed(2)} €`}
             color="text-[#1D9E75]"
             bg="bg-green-50"
             Icon={TrendingUp}
           />
           <MetricCard
             label="Articles vendus"
-            value={nbArticlesVendus}
+            value={articlesMois}
             color="text-blue-500"
             bg="bg-blue-50"
             Icon={ShoppingBag}
@@ -196,12 +236,12 @@ export default function Dashboard() {
           <span className="text-gray-300 text-lg leading-none">›</span>
         </Link>
 
-        {/* Bandeau info quand aucune vente du jour dans localStorage */}
-        {nbArticlesVendus === 0 && (
+        {/* Bandeau info quand aucune vente ce mois */}
+        {articlesMois === 0 && (
           <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-blue-700">
             <span className="text-lg">ℹ️</span>
             <span>
-              Aucune vente enregistrée aujourd'hui — les données CA et top produits
+              Aucune vente enregistrée ce mois — les données CA et top produits
               apparaîtront dès la première saisie dans la Caisse.
             </span>
           </div>
@@ -210,16 +250,43 @@ export default function Dashboard() {
         {/* ── GRILLE 2 COL DESKTOP ──────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* GRAPHIQUE CA 7 JOURS */}
+          {/* GRAPHIQUE CA PAR JOUR DU MOIS */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">
-              CA — 7 derniers jours
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">CA — jour par jour</h2>
+            <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-2">
+              <button
+                onClick={() => {
+                  const [y, m] = moisSelectionne.split('-').map(Number)
+                  const d = new Date(y, m - 2, 1)
+                  setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
+                }}
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 active:bg-gray-100"
+              >
+                ‹
+              </button>
+              <span className="text-sm font-semibold text-gray-800 capitalize">
+                {new Date(moisSelectionne + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+              </span>
+              <button
+                onClick={() => {
+                  const [y, m] = moisSelectionne.split('-').map(Number)
+                  const d = new Date(y, m, 1)
+                  setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
+                }}
+                disabled={moisSelectionne >= new Date().toLocaleDateString('en-CA').slice(0, 7)}
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 active:bg-gray-100 disabled:opacity-30"
+              >
+                ›
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              CA du mois : <span className="font-bold text-[#1D9E75]">{caMois.toFixed(2)} €</span>
+            </p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={donneesGraphique} barSize={28}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                 <XAxis
-                  dataKey="date"
+                  dataKey="jour"
                   tick={{ fontSize: 11, fill: '#9CA3AF' }}
                   axisLine={false}
                   tickLine={false}
@@ -241,14 +308,14 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </section>
 
-          {/* TOP 5 PRODUITS */}
+          {/* TOP 5 PRODUITS DU MOIS */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <h2 className="text-sm font-semibold text-gray-700 mb-4">
-              Top 5 produits du jour
+              Top 5 produits du mois
             </h2>
             {top5.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">
-                Aucune vente enregistrée aujourd'hui.
+                Aucune vente enregistrée ce mois.
               </p>
             ) : (
               <div className="space-y-3">
@@ -277,7 +344,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-700">État des stocks</h2>
               <Link
-                to="/ruptures"
+                to="/catalogue"
                 className="text-xs text-[#1D9E75] font-medium hover:underline"
               >
                 Voir tout →

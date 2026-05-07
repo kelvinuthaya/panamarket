@@ -26,12 +26,15 @@ export function AuthProvider({ children }) {
 
   const logout = () => supabase.auth.signOut()
 
+  // Normalisation : strip accents + lowercase pour éviter le mismatch 'gérant' vs 'gerant'
+  const rawRole = user?.user_metadata?.role ?? user?.app_metadata?.role ?? null
+  // eslint-disable-next-line no-misleading-character-class
+  const role = rawRole ? rawRole.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() : null
+
   return (
     <AuthContext.Provider value={{
       user,
-      // Supabase stocke le rôle dans user_metadata (signup) ou app_metadata (admin dashboard)
-      // On lit les deux pour couvrir les deux cas
-      role: user?.user_metadata?.role ?? user?.app_metadata?.role ?? null,
+      role,
       isAuthenticated: !!user,
       loading,
       logout,

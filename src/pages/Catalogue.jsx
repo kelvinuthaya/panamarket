@@ -65,7 +65,7 @@ export default function Catalogue() {
 
   // ── Accès ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!authLoading && role && role !== 'manager' && role !== 'gérant') {
+    if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
       navigate('/ruptures', { replace: true })
     }
   }, [role, authLoading, navigate])
@@ -235,7 +235,7 @@ export default function Catalogue() {
     )
   }
 
-  if (!role || (role !== 'manager' && role !== 'gérant')) return null
+  if (!role || (role !== 'manager' && role !== 'gerant')) return null
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">

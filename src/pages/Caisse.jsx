@@ -4,11 +4,11 @@ import { supabase } from '../lib/supabase'
 import jsPDF from 'jspdf'
 import { Search, Plus, Minus, FileText, Mail, ClipboardList, X, AlertTriangle, ScanLine, Trash2 } from 'lucide-react'
 
-const today   = new Date().toISOString().slice(0, 10)
+const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
   weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 })
-const STORAGE_KEY = `caisse_${today}`
+const STORAGE_KEY_PANIER = `caisse_${today}`
 
 export default function Caisse() {
   const [produits, setProduits]   = useState([])
@@ -36,20 +36,38 @@ export default function Caisse() {
     async function init() {
       const { data, error } = await supabase
         .from('produits')
-        .select('id, code, designation, gamme, pr_vente')
+        .select('id, code, designation, gamme, pr_vente, st_actuel')
         .order('designation')
 
       if (!error) {
         setProduits(data)
         try {
-          const saved = localStorage.getItem(STORAGE_KEY)
+          const saved = localStorage.getItem(STORAGE_KEY_PANIER)
           if (saved) {
             const parsed = JSON.parse(saved)
             if (parsed.panier)       setPanier(parsed.panier)
-            if (parsed.transactions) setTransactions(parsed.transactions)
             if (parsed.modePaiement) setModePaiement(parsed.modePaiement)
           }
         } catch {}
+
+        // Fetch transactions du jour depuis Supabase
+        const debutJour = new Date()
+        debutJour.setHours(0, 0, 0, 0)
+        const { data: txnData } = await supabase
+          .from('transactions')
+          .select('*')
+          .gte('created_at', debutJour.toISOString())
+          .order('created_at')
+
+        if (txnData) {
+          setTransactions(txnData.map(t => ({
+            id:       t.id,
+            heure:    new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            produits: t.produits,
+            total:    parseFloat(t.total),
+            paiement: t.paiement,
+          })))
+        }
       }
       loadedRef.current = true
       setLoading(false)
@@ -60,8 +78,8 @@ export default function Caisse() {
   // ── Persistance localStorage ───────────────────────────────────────────────
   useEffect(() => {
     if (!loadedRef.current) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ panier, transactions, modePaiement }))
-  }, [panier, transactions, modePaiement])
+    localStorage.setItem(STORAGE_KEY_PANIER, JSON.stringify({ panier, modePaiement }))
+  }, [panier, modePaiement])
 
   // ── Toast auto-dismiss 2.5 s ───────────────────────────────────────────────
   useEffect(() => {
@@ -148,28 +166,56 @@ export default function Caisse() {
     setPanier(prev => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) + delta) }))
   }
 
-  function validerVente() {
+  async function validerVente() {
     if (articlesEnPanier.length === 0) return
-    const now   = new Date()
-    const heure = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-    const transaction = {
-      id:       `txn_${now.getTime()}`,
-      heure,
-      produits: articlesEnPanier.map(p => ({
-        designation:  p.designation,
-        quantite:     panier[p.id],
-        prixUnitaire: p.pr_vente,
-      })),
-      total:    parseFloat(totalPanier.toFixed(2)),
-      paiement: modePaiement,
+
+    const produitsTxn = articlesEnPanier.map(p => ({
+      id:           p.id,
+      designation:  p.designation,
+      quantite:     panier[p.id],
+      prixUnitaire: p.pr_vente,
+    }))
+    const total = parseFloat(totalPanier.toFixed(2))
+
+    const { data: inserted, error } = await supabase
+      .from('transactions')
+      .insert({ produits: produitsTxn, total, paiement: modePaiement })
+      .select()
+      .single()
+
+    if (error) {
+      setToast('Erreur d\'enregistrement — réessayez')
+      return
     }
-    setTransactions(prev => [...prev, transaction])
+
+    await Promise.all(articlesEnPanier.map(p =>
+      supabase.from('produits').update({
+        st_actuel: Math.max(0, p.st_actuel - panier[p.id])
+      }).eq('id', p.id)
+    ))
+
+    const heure = new Date(inserted.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    setTransactions(prev => [...prev, {
+      id:       inserted.id,
+      heure,
+      produits: produitsTxn,
+      total,
+      paiement: modePaiement,
+    }])
+
+    setProduits(prev => prev.map(p => {
+      const qte = panier[p.id]
+      if (!qte) return p
+      return { ...p, st_actuel: Math.max(0, p.st_actuel - qte) }
+    }))
+
     setPanier({})
     setMontantRecu('')
     setToast('Vente enregistrée ✓')
   }
 
-  function supprimerTransaction(id) {
+  async function supprimerTransaction(id) {
+    await supabase.from('transactions').delete().eq('id', id)
     setTransactions(prev => prev.filter(t => t.id !== id))
   }
 
@@ -184,7 +230,7 @@ export default function Caisse() {
     setPanier({})
     setMontantRecu('')
     setModePaiement('cb')
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_KEY_PANIER)
     setShowConfirmCloturer(false)
     setShowRecap(false)
   }
