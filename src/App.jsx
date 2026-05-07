@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Ruptures from './pages/Ruptures'
-import Approvisionnement from './pages/Approvisionnement'
+import Achats from './pages/Achats'
 import Caisse from './pages/Caisse'
 import Dashboard from './pages/Dashboard'
 import Catalogue from './pages/Catalogue'
@@ -31,7 +31,9 @@ function AppRoutes() {
           <Route path="/" element={<Navigate to="/ruptures" replace />} />
           <Route path="/login" element={<Navigate to="/ruptures" replace />} />
           <Route path="/ruptures" element={<Ruptures />} />
-          <Route path="/approvisionnement" element={<Approvisionnement />} />
+          <Route path="/achats" element={<Achats />} />
+          <Route path="/approvisionnement" element={<Navigate to="/achats" replace />} />
+          <Route path="/livraison" element={<Navigate to="/achats" replace />} />
           <Route path="/caisse" element={<Caisse />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/catalogue" element={<Catalogue />} />

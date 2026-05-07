@@ -2,14 +2,20 @@ import { NavLink } from 'react-router-dom'
 import { AlertTriangle, ShoppingCart, CreditCard, BarChart2, Package, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-const TABS_TOUS = [
-  { to: '/ruptures',          label: 'Ruptures',   Icon: AlertTriangle },
-  { to: '/approvisionnement', label: 'Appro',      Icon: ShoppingCart  },
-  { to: '/caisse',            label: 'Caisse',     Icon: CreditCard    },
-  { to: '/dashboard',         label: 'Dashboard',  Icon: BarChart2     },
+const TABS_EMPLOYE = [
+  { to: '/ruptures',  label: 'Ruptures',  Icon: AlertTriangle },
+  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart  },
+  { to: '/caisse',    label: 'Caisse',    Icon: CreditCard    },
+  { to: '/dashboard', label: 'Dashboard', Icon: BarChart2     },
 ]
 
-const TAB_CATALOGUE = { to: '/catalogue', label: 'Catalogue', Icon: Package }
+const TABS_MANAGER = [
+  { to: '/ruptures',  label: 'Ruptures',  Icon: AlertTriangle },
+  { to: '/catalogue', label: 'Catalogue', Icon: Package       },
+  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart  },
+  { to: '/caisse',    label: 'Caisse',    Icon: CreditCard    },
+  { to: '/dashboard', label: 'Dashboard', Icon: BarChart2     },
+]
 
 const BottomNav = () => {
   const { logout, role } = useAuth()
@@ -20,7 +26,7 @@ const BottomNav = () => {
   // Comparaison normalisée : insensible à la casse et aux variantes d'accent
   const estManager = role === 'manager' || role === 'gérant' || role === 'gerant'
 
-  const tabs = estManager ? [...TABS_TOUS, TAB_CATALOGUE] : TABS_TOUS
+  const tabs = estManager ? TABS_MANAGER : TABS_EMPLOYE
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 overflow-x-auto md:overflow-x-visible">
