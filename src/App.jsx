@@ -5,8 +5,11 @@ import Achats from './pages/Achats'
 import Caisse from './pages/Caisse'
 import Dashboard from './pages/Dashboard'
 import Catalogue from './pages/Catalogue'
+import Gestion from './pages/Gestion'
 import Login from './pages/Login'
-import BottomNav from './components/BottomNav'
+import { AppShell } from './components/layout/AppShell'
+// L'ancien src/components/BottomNav.jsx n'est plus utilisé — remplacé par AppShell
+// (qui inclut sa propre BottomNav layout/). À supprimer une fois la migration finie.
 
 // Composant interne : a accès au contexte Auth (AuthProvider est parent dans App)
 function AppRoutes() {
@@ -25,23 +28,21 @@ function AppRoutes() {
   }
 
   return (
-    <>
-      <main className="pb-16">
-        <Routes>
-          <Route path="/" element={<Navigate to="/ruptures" replace />} />
-          <Route path="/login" element={<Navigate to="/ruptures" replace />} />
-          <Route path="/ruptures" element={<Ruptures />} />
-          <Route path="/achats" element={<Achats />} />
-          <Route path="/approvisionnement" element={<Navigate to="/achats" replace />} />
-          <Route path="/livraison" element={<Navigate to="/achats" replace />} />
-          <Route path="/caisse" element={<Caisse />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/catalogue" element={<Catalogue />} />
-          <Route path="*" element={<Navigate to="/ruptures" replace />} />
-        </Routes>
-      </main>
-      <BottomNav />
-    </>
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<Navigate to="/ruptures" replace />} />
+        <Route path="/login" element={<Navigate to="/ruptures" replace />} />
+        <Route path="/ruptures" element={<Ruptures />} />
+        <Route path="/achats" element={<Achats />} />
+        <Route path="/approvisionnement" element={<Navigate to="/achats" replace />} />
+        <Route path="/livraison" element={<Navigate to="/achats" replace />} />
+        <Route path="/caisse" element={<Caisse />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/catalogue" element={<Catalogue />} />
+        <Route path="/gestion" element={<Gestion />} />
+        <Route path="*" element={<Navigate to="/ruptures" replace />} />
+      </Routes>
+    </AppShell>
   )
 }
 

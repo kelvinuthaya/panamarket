@@ -2,6 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* PANAME OS — base body + utilitaires */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply font-sans bg-calcaire text-bitume;
+  }
+}
+
+@layer components {
+  /* Petit label "rue" en mono uppercase serré */
+  .tag-street {
+    @apply font-mono font-semibold text-[10px] tracking-[0.08em] uppercase;
+  }
+}
+
+@layer utilities {
+  /* Chiffres alignés (totaux, prix) — préserve la largeur des digits */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Halo pulsant des StatusDot — défini ici pour ne pas écraser le `pulse`
+     natif de Tailwind (utilisé par animate-pulse) */
+  .animate-status-pulse {
+    animation: status-pulse 1.6s ease-out infinite;
+  }
+
+  /* Grain texture — s'applique sur les fonds dark (bg-bitume, sidebar, login).
+     background-image se superpose à background-color sans l'écraser. */
+  .bg-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 200px 200px;
+  }
+
+  /* Fade-in de page — appliqué sur le <main> de AppShell, rejoue à chaque montage */
+  .page-fade {
+    animation: pageFadeIn 220ms ease-out both;
+  }
+}
+
+@keyframes status-pulse {
+  0%        { transform: scale(1);   opacity: 0.6; }
+  70%, 100% { transform: scale(2.5); opacity: 0;   }
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;

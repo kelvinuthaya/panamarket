@@ -1,8 +1,35 @@
+/*
+ * LOGIQUE PRÉSERVÉE — NE PAS MODIFIER :
+ *
+ * ListeCourses :
+ *   state  : modalAjout, recherche
+ *   fns    : supprimerItem, handleAjouter, produitsDisponibles, renderItem, renderSection
+ *   logic  : ruptures/insuff/manuels separation, nbCoches count, sticky "Passer à la réception"
+ *
+ * Reception :
+ *   state  : scannerOuvert, offLoading, offMessage, modalCreation, formCreation, savingCreation
+ *   refs   : videoRef, readerRef
+ *   effects: ZXing scanner (delay 50ms pattern)
+ *   fns    : handleScan, chercherSurOFF, sauvegarderNouveauProduit, retirerItem,
+ *            formatDLC, isDLCValide, updateQty, updateDlc
+ *
+ * OngletHistorique :
+ *   fns    : formaterDateLivraison, formaterDlc (pure display)
+ *
+ * Achats (main) :
+ *   state  : onglet, listeCourses, receptionItems, produitsCatalogue, loading, validating, toast, historique
+ *   effects: toast auto-dismiss, fetchProduits, historique fetch on tab change
+ *   fns    : toggleCheck, ajouterEtCocher, convertirDlc, validerAchats
+ */
+
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/library'
-import { Search, X, ScanLine, Loader2, AlertTriangle } from 'lucide-react'
+import { Search, X, ScanLine, Loader2, AlertTriangle, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { Card } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { StatusDot } from '../components/ui/StatusDot'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -86,55 +113,65 @@ const ListeCourses = ({
   const renderItem = (item) => {
     const p = item.produit
     const statut = getStatut(p)
-    const badgeClass = {
-      rupture:     'bg-red-100 text-red-700',
-      insuffisant: 'bg-orange-100 text-orange-700',
-      ok:          'bg-green-100 text-green-700',
-    }[statut]
-    const badgeLabel = { rupture: 'Rupture', insuffisant: 'Insuffisant', ok: 'En stock' }[statut]
 
     return (
-      <div
+      <Card
         key={p.id}
-        className={`bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3 transition-opacity ${
-          item.checked ? 'opacity-40' : ''
-        }`}
+        variant={statut === 'rupture' ? 'rupture' : statut === 'insuffisant' ? 'faible' : 'default'}
+        className={`flex items-center gap-3 ${item.checked ? 'opacity-40' : ''}`}
       >
-        <input
-          type="checkbox"
-          checked={item.checked}
-          onChange={() => toggleCheck(p.id)}
-          className="w-5 h-5 accent-[#1D9E75] shrink-0 cursor-pointer"
-        />
+        {/* Checkbox circulaire personnalisée */}
+        <button
+          onClick={() => toggleCheck(p.id)}
+          className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition ${
+            item.checked ? 'bg-paname-700 border-paname-700' : 'border-pavillon bg-transparent'
+          }`}
+          aria-label={item.checked ? 'Décocher' : 'Cocher'}
+        >
+          {item.checked && <span className="text-white text-[10px] font-bold">✓</span>}
+        </button>
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium text-gray-800 truncate ${item.checked ? 'line-through' : ''}`}>
+          <p className={`font-display font-bold text-sm text-bitume truncate ${item.checked ? 'line-through' : ''}`}>
             {p.designation}
           </p>
-          <p className="text-xs text-gray-400">
-            {p.gamme} · stock {p.st_actuel}/{p.st_min} u.
+          <p className="font-mono text-[10px] text-zinc-400">
+            {statut === 'rupture' ? 'Rupture totale' : `Manque ${p.st_min - p.st_actuel} u.`}
           </p>
         </div>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${badgeClass}`}>
-          {badgeLabel}
-        </span>
         <button
           onClick={() => supprimerItem(p.id)}
-          className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 shrink-0 transition-colors"
           aria-label="Retirer"
+          className="p-1.5 rounded-lg text-zinc-300 hover:text-pavillon hover:bg-pavillon/10 transition shrink-0"
         >
           <X size={14} />
         </button>
-      </div>
+      </Card>
     )
   }
 
-  const renderSection = (label, items) => {
+  const renderSection = (type, items) => {
     if (items.length === 0) return null
     return (
       <div className="mb-5">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">
-          {label} ({items.length})
-        </p>
+        {type === 'ruptures' && (
+          <div className="flex items-center gap-2 mb-2">
+            <StatusDot variant="rupture" pulse={true} />
+            <p className="tag-street text-pavillon">
+              À ACHETER · {items.length} RUPTURE{items.length > 1 ? 'S' : ''}
+            </p>
+          </div>
+        )}
+        {type === 'insuff' && (
+          <div className="flex items-center gap-2 mb-2">
+            <StatusDot variant="faible" pulse={true} />
+            <p className="tag-street text-yellow-700">À SURVEILLER · {items.length}</p>
+          </div>
+        )}
+        {type === 'manuels' && (
+          <p className="tag-street text-zinc-400 mb-2">
+            AJOUTÉS MANUELLEMENT · {items.length}
+          </p>
+        )}
         <div className="flex flex-col gap-2">{items.map(renderItem)}</div>
       </div>
     )
@@ -143,96 +180,107 @@ const ListeCourses = ({
   return (
     <div className="pb-24">
       <div className="flex items-center justify-between mb-5">
-        <p className="text-sm text-gray-400">
+        <p className="font-mono text-[11px] text-zinc-400">
           {listeCourses.length} produit{listeCourses.length !== 1 ? 's' : ''} à commander
         </p>
         <button
           onClick={() => setModalAjout(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-[#1D9E75] text-white text-sm font-semibold rounded-xl active:opacity-80"
+          className="bg-paname-700 text-white rounded-xl px-3 py-2 tag-street flex items-center gap-1.5 shadow-paname"
         >
-          + Ajouter un produit
+          + AJOUTER
         </button>
       </div>
 
       {listeCourses.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16">
           <p className="text-4xl mb-3">🎉</p>
-          <p className="font-medium text-gray-500">Aucun produit à commander</p>
-          <p className="text-sm mt-1">Tous les stocks sont suffisants</p>
+          <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT À COMMANDER</p>
+          <p className="font-mono text-[10px] text-zinc-400">Tous les stocks sont suffisants</p>
         </div>
       )}
 
-      {renderSection('Ruptures totales', ruptures)}
-      {renderSection('Stocks insuffisants', insuff)}
-      {renderSection('Ajoutés manuellement', manuels)}
+      {renderSection('ruptures', ruptures)}
+      {renderSection('insuff', insuff)}
+      {renderSection('manuels', manuels)}
 
+      {/* Sticky CTA "Passer à la réception" */}
       {nbCoches > 0 && (
-        <div className="fixed bottom-16 left-0 right-0 px-4 pb-3">
+        <div
+          className="fixed left-0 right-0 md:left-60 px-4 pb-3"
+          style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
+        >
           <button
             onClick={() => setOnglet('reception')}
-            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-[#1D9E75] text-white py-3.5 rounded-xl text-sm font-bold shadow-lg active:opacity-80"
+            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 py-3.5 rounded-2xl font-bold tag-street shadow-or"
           >
-            📦 Passer à la réception
-            <span className="bg-white text-[#1D9E75] text-xs font-bold px-2 py-0.5 rounded-full">
+            PASSER À LA RÉCEPTION
+            <span className="bg-yellow-950 text-eiffel px-2 py-0.5 rounded-lg tag-street">
               {nbCoches}
             </span>
           </button>
         </div>
       )}
 
+      {/* FAB Camera — ouvre directement l'onglet réception (scanner) */}
+      <button
+        onClick={() => { setModalAjout(false); setOnglet('reception') }}
+        className="fixed right-4 rounded-2xl w-14 h-14 bg-gradient-to-br from-paname-700 to-paname-500 text-white flex items-center justify-center shadow-paname z-20"
+        style={{ bottom: 'calc(80px + env(safe-area-inset-bottom))' }}
+        aria-label="Scanner un produit"
+      >
+        <Camera size={24} />
+      </button>
+
+      {/* ── Modal "Ajouter un produit" ─────────────────────────────────────── */}
       {modalAjout && (
         <div
           className="fixed inset-0 z-50 bg-black/40 flex items-end"
           onClick={e => { if (e.target === e.currentTarget) { setModalAjout(false); setRecherche('') } }}
         >
-          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-2xl flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 shrink-0">
-              <h3 className="text-base font-semibold text-gray-800">Ajouter un produit</h3>
+          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-3xl border-t-2 border-paname-700 flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-bitume/5 shrink-0">
+              <h3 className="font-display font-bold text-bitume">Ajouter un produit</h3>
               <button
                 onClick={() => { setModalAjout(false); setRecherche('') }}
-                className="p-2 rounded-xl bg-gray-100 text-gray-500"
+                className="p-2 rounded-xl bg-bitume/5 text-zinc-500"
               >
                 <X size={18} />
               </button>
             </div>
             <div className="px-4 pt-3 pb-2 shrink-0">
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <Search size={15} className="absolute left-0 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Rechercher un produit…"
                   value={recherche}
                   onChange={e => setRecherche(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75]"
+                  className="w-full pl-5 pr-4 py-2.5 border-b-2 border-zinc-200 focus:border-paname-700 outline-none text-sm bg-transparent transition-colors"
                   autoFocus
                 />
               </div>
             </div>
-            <div className="overflow-y-auto flex-1 px-4 pb-6 space-y-2">
+            <div className="overflow-y-auto flex-1 px-4 pb-6 space-y-2 pt-2">
               {produitsDisponibles.length === 0 && (
-                <p className="text-center text-gray-400 py-8 text-sm">Aucun produit disponible</p>
+                <p className="text-center font-mono text-[10px] text-zinc-400 py-8">
+                  AUCUN PRODUIT DISPONIBLE
+                </p>
               )}
               {produitsDisponibles.map(p => {
                 const statut = getStatut(p)
-                const badgeClass = {
-                  rupture:     'bg-red-100 text-red-700',
-                  insuffisant: 'bg-orange-100 text-orange-700',
-                  ok:          'bg-green-100 text-green-700',
-                }[statut]
+                const badgeVariant = statut === 'rupture' ? 'rupture' : statut === 'insuffisant' ? 'faible' : 'ok'
                 const badgeLabel = { rupture: 'Rupture', insuffisant: 'Insuffisant', ok: 'En stock' }[statut]
                 return (
                   <button
                     key={p.id}
                     onClick={() => handleAjouter(p)}
-                    className="w-full text-left flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3 hover:border-[#1D9E75] active:bg-gray-50 transition-colors"
+                    className="w-full text-left flex items-center justify-between bg-white border border-bitume/5 rounded-2xl px-4 py-3 hover:border-paname-700/30 transition-colors"
                   >
                     <div className="min-w-0 mr-3">
-                      <p className="text-sm font-medium text-gray-800 truncate">{p.designation}</p>
-                      <p className="text-xs text-gray-400">{p.gamme} · {p.st_actuel}/{p.st_min} u.</p>
+                      <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
+                      <p className="font-mono text-[10px] text-zinc-400">{p.gamme} · {p.st_actuel}/{p.st_min} u.</p>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${badgeClass}`}>
-                      {badgeLabel}
-                    </span>
+                    <Badge variant={badgeVariant}>{badgeLabel}</Badge>
                   </button>
                 )
               })}
@@ -403,52 +451,54 @@ const Reception = ({
       {/* Bouton scanner */}
       <button
         onClick={() => setScannerOuvert(o => !o)}
-        className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold mb-4 transition-colors ${
+        className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl tag-street mb-4 transition ${
           scannerOuvert
-            ? 'bg-gray-200 text-gray-600'
-            : 'bg-[#1D9E75]/10 text-[#1D9E75] border border-[#1D9E75]/20'
+            ? 'bg-zinc-100 border border-zinc-200 text-zinc-600'
+            : 'bg-paname-700/10 border border-paname-700/20 text-paname-700'
         }`}
       >
         <ScanLine size={18} />
-        {scannerOuvert ? 'Fermer le scanner' : '📷 Scanner un produit reçu'}
+        {scannerOuvert ? 'FERMER LE SCANNER' : 'SCANNER UN PRODUIT REÇU'}
       </button>
 
       {/* Zone caméra ZXing */}
       {scannerOuvert && (
-        <div className="mb-4 rounded-xl overflow-hidden border border-[#1D9E75]/30 bg-black">
+        <div className="mb-4 rounded-2xl overflow-hidden border border-paname-700/30 bg-black">
           {/* playsInline obligatoire sur iOS Safari pour éviter le plein-écran */}
           <video ref={videoRef} className="w-full" playsInline muted />
-          <p className="text-center text-xs text-gray-400 py-2 bg-white border-t border-gray-100">
+          <p className="text-center font-mono text-[10px] text-zinc-400 py-2 bg-white border-t border-zinc-100">
             Pointez la caméra vers le code-barres du produit reçu
           </p>
         </div>
       )}
 
       {receptionItems.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16">
           <p className="text-4xl mb-3">📦</p>
-          <p className="font-medium text-gray-500">Aucune réception en attente</p>
-          <p className="text-sm mt-1">Cochez des produits dans la liste de courses<br />ou scannez un code-barres</p>
+          <p className="tag-street text-zinc-400 mb-1">AUCUNE RÉCEPTION</p>
+          <p className="font-mono text-[10px] text-zinc-400">
+            Cochez des produits dans la liste<br />ou scannez un code-barres
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           {receptionItems.map(item => {
             const vientDeLaListe = listeCourses.some(i => i.produit.id === item.produit.id)
             return (
-              <div key={item.produit.id} className="bg-white rounded-xl border border-gray-100 px-4 py-4">
-                {/* Nom + badge liste + bouton retirer */}
+              <div key={item.produit.id} className="bg-white rounded-2xl border border-bitume/10 px-4 py-4">
+                {/* Nom + bouton retirer */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="min-w-0 mr-3">
-                    <p className={`text-sm font-semibold truncate ${
-                      vientDeLaListe ? 'text-[#1D9E75]' : 'text-gray-800'
+                    <p className={`font-display font-bold text-sm truncate ${
+                      vientDeLaListe ? 'text-signal' : 'text-bitume'
                     }`}>
                       {item.produit.designation}
                     </p>
-                    <p className="text-xs text-gray-400">{item.produit.gamme}</p>
+                    <p className="font-mono text-[10px] text-zinc-400">{item.produit.gamme}</p>
                   </div>
                   <button
                     onClick={() => retirerItem(item.produit.id)}
-                    className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 shrink-0 transition-colors"
+                    className="p-1.5 rounded-lg text-zinc-300 hover:text-pavillon hover:bg-pavillon/10 shrink-0 transition"
                     aria-label="Retirer"
                   >
                     <X size={14} />
@@ -457,23 +507,27 @@ const Reception = ({
 
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="text-xs text-gray-400 block mb-1.5">Quantité reçue</label>
+                    <label className="font-mono text-[10px] text-zinc-400 mb-1.5 block">
+                      Quantité reçue
+                    </label>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateQty(item.produit.id, item.qtRecue - 1)}
-                        className="w-9 h-9 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 text-lg font-bold flex items-center justify-center active:bg-gray-100"
+                        className="border border-bitume/10 bg-bitume/5 text-bitume rounded-xl w-9 h-9 text-lg font-bold flex items-center justify-center"
                       >−</button>
-                      <span className="flex-1 text-center text-sm font-semibold text-gray-800">
+                      <span className="flex-1 text-center font-mono text-sm font-bold text-bitume tabular">
                         {item.qtRecue}
                       </span>
                       <button
                         onClick={() => updateQty(item.produit.id, item.qtRecue + 1)}
-                        className="w-9 h-9 rounded-xl border border-[#1D9E75] bg-[#1D9E75]/10 text-[#1D9E75] text-lg font-bold flex items-center justify-center active:bg-[#1D9E75]/20"
+                        className="border border-paname-700 bg-paname-700/10 text-paname-700 rounded-xl w-9 h-9 text-lg font-bold flex items-center justify-center"
                       >+</button>
                     </div>
                   </div>
                   <div className="flex-1">
-                    <label className="text-xs text-gray-400 block mb-1.5">DLC (optionnel)</label>
+                    <label className="font-mono text-[10px] text-zinc-400 mb-1.5 block">
+                      DLC (optionnel)
+                    </label>
                     <input
                       type="text"
                       inputMode="numeric"
@@ -481,14 +535,14 @@ const Reception = ({
                       value={item.dlc}
                       onChange={e => updateDlc(item.produit.id, formatDLC(e.target.value))}
                       placeholder="JJ/MM/AAAA"
-                      className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${
+                      className={`w-full border-b-2 outline-none py-2 text-sm bg-transparent transition-colors ${
                         isDLCValide(item.dlc)
-                          ? 'border-gray-200 focus:border-[#1D9E75]'
-                          : 'border-red-400 focus:border-red-400 bg-red-50'
+                          ? 'border-zinc-200 focus:border-paname-700'
+                          : 'border-pavillon bg-pavillon/5'
                       }`}
                     />
                     {!isDLCValide(item.dlc) && (
-                      <p className="text-xs text-red-500 mt-1">Date impossible</p>
+                      <p className="font-mono text-[10px] text-pavillon mt-1">Date impossible</p>
                     )}
                   </div>
                 </div>
@@ -498,18 +552,21 @@ const Reception = ({
         </div>
       )}
 
-      {/* Bouton valider — visible seulement si items présents */}
+      {/* Bouton valider — sticky, visible seulement si items présents */}
       {receptionItems.length > 0 && (
-        <div className="fixed bottom-16 left-0 right-0 px-4 pb-3">
+        <div
+          className="fixed left-0 right-0 md:left-60 px-4 pb-3"
+          style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
+        >
           <button
             onClick={validerAchats}
             disabled={validating || receptionItems.some(i => !isDLCValide(i.dlc))}
-            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-[#1D9E75] text-white py-3.5 rounded-xl text-sm font-bold shadow-lg disabled:opacity-50 active:opacity-80"
+            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 py-3.5 rounded-2xl font-bold tag-street shadow-or disabled:opacity-50"
           >
             {validating ? (
-              <><Loader2 size={16} className="animate-spin" /> Validation…</>
+              <><Loader2 size={16} className="animate-spin" /> VALIDATION…</>
             ) : (
-              <>✓ Valider les achats ({receptionItems.length} produit{receptionItems.length !== 1 ? 's' : ''})</>
+              <>✓ VALIDER ({receptionItems.length} PRODUIT{receptionItems.length > 1 ? 'S' : ''})</>
             )}
           </button>
         </div>
@@ -521,13 +578,16 @@ const Reception = ({
           className="fixed inset-0 z-[55] bg-black/40 flex items-end sm:items-center sm:justify-center"
           onClick={e => { if (e.target === e.currentTarget) setModalCreation(false) }}
         >
-          <div className="bg-white w-full max-h-[92vh] rounded-t-2xl sm:rounded-2xl sm:max-w-md flex flex-col">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 shrink-0">
+          <div className="bg-white w-full max-h-[92vh] rounded-t-3xl border-t-2 border-paname-700 sm:rounded-2xl sm:border-2 sm:max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-bitume/5 shrink-0">
               <div>
-                <h2 className="text-base font-semibold text-gray-800">Produit inconnu</h2>
-                <p className="text-xs text-gray-400">Créer et ajouter à la réception</p>
+                <h2 className="font-display font-bold text-bitume">Produit inconnu</h2>
+                <p className="font-mono text-[10px] text-zinc-400">Créer et ajouter à la réception</p>
               </div>
-              <button onClick={() => setModalCreation(false)} className="p-2 rounded-xl bg-gray-100 text-gray-500">
+              <button
+                onClick={() => setModalCreation(false)}
+                className="p-2 rounded-xl bg-bitume/5 text-zinc-500"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -537,30 +597,32 @@ const Reception = ({
 
                 {/* Feedback OFF */}
                 {offLoading && (
-                  <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5">
-                    <Loader2 size={14} className="animate-spin text-[#1D9E75]" />
+                  <div className="flex items-center gap-2 font-mono text-[10px] text-zinc-500 bg-zinc-50 rounded-2xl px-3 py-2.5">
+                    <Loader2 size={14} className="animate-spin text-paname-700" />
                     Recherche Open Food Facts…
                   </div>
                 )}
                 {offMessage && (
-                  <p className="text-xs text-orange-500 bg-orange-50 rounded-xl px-3 py-2.5">{offMessage}</p>
+                  <p className="font-mono text-[10px] text-orange-500 bg-orange-50 rounded-2xl px-3 py-2.5">
+                    {offMessage}
+                  </p>
                 )}
 
                 {/* Code EAN (pré-rempli, lecture seule) */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Code EAN</label>
+                  <label className="font-mono text-[10px] text-zinc-400 mb-1 block">CODE EAN</label>
                   <input
                     type="text"
                     value={formCreation.code}
                     readOnly
-                    className="w-full px-3 py-2.5 border border-gray-100 rounded-xl text-sm bg-gray-50 text-gray-500 font-mono"
+                    className="w-full border-b-2 border-zinc-100 py-2 text-sm bg-zinc-50 text-zinc-400 font-mono outline-none"
                   />
                 </div>
 
                 {/* Désignation */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">
-                    Désignation <span className="text-red-400">*</span>
+                  <label className="font-mono text-[10px] text-zinc-400 mb-1 block">
+                    DÉSIGNATION <span className="text-pavillon">*</span>
                   </label>
                   <input
                     type="text"
@@ -568,17 +630,17 @@ const Reception = ({
                     value={formCreation.designation}
                     onChange={e => setFormCreation(f => ({ ...f, designation: e.target.value }))}
                     placeholder="Ex : Red Bull 250ml"
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75]"
+                    className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
                   />
                 </div>
 
                 {/* Gamme */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Gamme</label>
+                  <label className="font-mono text-[10px] text-zinc-400 mb-1 block">GAMME</label>
                   <select
                     value={formCreation.gamme}
                     onChange={e => setFormCreation(f => ({ ...f, gamme: e.target.value }))}
-                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75] bg-white"
+                    className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
                   >
                     {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
@@ -587,7 +649,7 @@ const Reception = ({
                 {/* Stock min / Prix vente */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Stock minimum</label>
+                    <label className="font-mono text-[10px] text-zinc-400 mb-1 block">STOCK MIN</label>
                     <input
                       type="number"
                       min="0"
@@ -595,12 +657,12 @@ const Reception = ({
                       value={formCreation.st_min}
                       onChange={e => setFormCreation(f => ({ ...f, st_min: e.target.value }))}
                       placeholder="0"
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75]"
+                      className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">
-                      Prix vente (€) <span className="text-red-400">*</span>
+                    <label className="font-mono text-[10px] text-zinc-400 mb-1 block">
+                      PRIX VENTE (€) <span className="text-pavillon">*</span>
                     </label>
                     <input
                       type="number"
@@ -610,34 +672,34 @@ const Reception = ({
                       value={formCreation.pr_vente}
                       onChange={e => setFormCreation(f => ({ ...f, pr_vente: e.target.value }))}
                       placeholder="0.00"
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75]"
+                      className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 bg-blue-50 rounded-xl px-3 py-2.5">
-                  <AlertTriangle size={14} className="text-blue-400 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-600">
+                <div className="flex items-start gap-2 bg-paname-700/5 rounded-2xl px-3 py-2.5">
+                  <AlertTriangle size={14} className="text-paname-500 mt-0.5 shrink-0" />
+                  <p className="font-mono text-[10px] text-paname-700">
                     Le stock initial sera mis à jour automatiquement lors de la validation de la réception.
                   </p>
                 </div>
 
               </div>
 
-              <div className="flex gap-3 px-4 pt-3 pb-16 sm:pb-5 border-t border-gray-100 shrink-0">
+              <div className="flex gap-3 px-4 pt-3 pb-16 sm:pb-5 border-t border-bitume/5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalCreation(false)}
-                  className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
+                  className="flex-1 py-3 rounded-xl border border-bitume/10 tag-street text-zinc-500"
                 >
-                  Annuler
+                  ANNULER
                 </button>
                 <button
                   type="submit"
                   disabled={savingCreation || offLoading}
-                  className="flex-1 py-3 rounded-xl bg-[#1D9E75] text-white text-sm font-semibold disabled:opacity-50"
+                  className="flex-1 py-3 rounded-xl bg-paname-700 text-white tag-street disabled:opacity-50"
                 >
-                  {savingCreation ? 'Création…' : 'Créer et ajouter'}
+                  {savingCreation ? 'CRÉATION…' : 'CRÉER ET AJOUTER'}
                 </button>
               </div>
             </form>
@@ -666,9 +728,10 @@ function formaterDlc(iso) {
 function OngletHistorique({ historique }) {
   if (historique.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400">
+      <div className="text-center py-16">
         <p className="text-4xl mb-3">📭</p>
-        <p className="font-medium text-gray-500">Aucune livraison enregistrée</p>
+        <p className="tag-street text-zinc-400 mb-1">AUCUNE LIVRAISON</p>
+        <p className="font-mono text-[10px] text-zinc-400">Aucune livraison enregistrée</p>
       </div>
     )
   }
@@ -679,31 +742,35 @@ function OngletHistorique({ historique }) {
         const lignes = livraison.stock_dlc ?? []
         const nbProduits = lignes.length
         return (
-          <div key={livraison.id} className="bg-white rounded-xl border border-gray-100 px-4 py-4">
+          <div key={livraison.id} className="bg-white rounded-2xl border border-bitume/5 px-4 py-4">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <p className="text-sm font-semibold text-gray-800">
+                <p className="font-display font-bold text-sm text-bitume">
                   {formaterDateLivraison(livraison.created_at)}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="font-mono text-[10px] text-zinc-400 mt-0.5">
                   {nbProduits} produit{nbProduits !== 1 ? 's' : ''} reçu{nbProduits !== 1 ? 's' : ''}
                 </p>
               </div>
             </div>
             {lignes.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">Aucun produit avec DLC enregistré</p>
+              <p className="font-mono text-[10px] text-zinc-400 italic">
+                Aucun produit avec DLC enregistré
+              </p>
             ) : (
-              <div className="divide-y divide-gray-50">
+              <div>
                 {lignes.map(ligne => (
-                  <div key={ligne.id} className="flex items-center justify-between py-2">
-                    <p className="text-sm text-gray-700 truncate flex-1 mr-3">
+                  <div key={ligne.id} className="flex items-center justify-between py-2 border-t border-zinc-50">
+                    <p className="font-display text-sm text-bitume truncate flex-1 mr-3">
                       {ligne.designation}
                     </p>
                     <div className="flex items-center gap-3 shrink-0">
                       {ligne.dlc && (
-                        <span className="text-xs text-gray-400">DLC {formaterDlc(ligne.dlc)}</span>
+                        <span className="font-mono text-[10px] text-zinc-400">
+                          DLC {formaterDlc(ligne.dlc)}
+                        </span>
                       )}
-                      <span className="text-xs font-semibold text-[#1D9E75]">
+                      <span className="font-mono text-[10px] font-bold text-paname-700 tabular">
                         ×{ligne.quantite}
                       </span>
                     </div>
@@ -855,65 +922,45 @@ const Achats = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-gray-400 text-sm">
-        Chargement…
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="tag-street text-eiffel">CHARGEMENT…</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="pb-24">
 
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 left-4 right-4 z-[60] bg-gray-800 text-white text-sm font-medium px-4 py-3 rounded-xl text-center shadow-lg pointer-events-none">
+        <div className="fixed top-4 left-4 right-4 z-[60] bg-paname-700 text-white font-bold tag-street px-4 py-3 rounded-2xl text-center shadow-paname pointer-events-none">
           {toast}
         </div>
       )}
 
-      {/* Header sticky */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <h1 className="text-lg font-semibold text-gray-800 mb-3">🛒 Achats</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setOnglet('liste')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              onglet === 'liste'
-                ? 'bg-gray-900 text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-          >
-            📋 Liste de courses
-          </button>
-          <button
-            onClick={() => setOnglet('reception')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-              onglet === 'reception'
-                ? 'bg-gray-900 text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-          >
-            📦 Réception
-            {receptionItems.length > 0 && (
-              <span className="bg-[#1D9E75] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                {receptionItems.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setOnglet('historique')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              onglet === 'historique'
-                ? 'bg-gray-900 text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-          >
-            🕐 Historique
-          </button>
-        </div>
-      </header>
-
       <div className="p-4 max-w-2xl mx-auto">
+        {/* Tabs PANAME OS */}
+        <div className="mb-5">
+          <p className="tag-street text-zinc-400 mb-3">ACHATS</p>
+          <div className="bg-white rounded-2xl p-1 border border-bitume/10 flex gap-1">
+            {['liste', 'reception', 'historique'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setOnglet(tab)}
+                className={`flex-1 py-2 rounded-xl tag-street transition ${
+                  onglet === tab ? 'bg-paname-700 text-white' : 'text-zinc-500 hover:bg-bitume/5'
+                }`}
+              >
+                {tab === 'liste'
+                  ? 'LISTE'
+                  : tab === 'reception'
+                  ? `RÉCEPT.${receptionItems.length > 0 ? ` (${receptionItems.length})` : ''}`
+                  : 'HISTO.'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {onglet === 'liste' && (
           <ListeCourses
             listeCourses={listeCourses}

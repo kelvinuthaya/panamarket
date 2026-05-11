@@ -1,12 +1,17 @@
-// PRESERVED: all state, useEffects, functions, useMemo, GAMMES, FORM_VIDE, detecterGamme
+// LOGIQUE PRÉSERVÉE : fetchProduits, chercherSurOFF, scanner ZXing,
+// sauvegarder (insert/update Supabase), supprimer, fermerModal, ouvrirAjout, ouvrirModif
+
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Search, Pencil, Trash2, ScanLine, X, AlertTriangle, Loader2 } from 'lucide-react'
+import {
+  Plus, Search, Pencil, Trash2, ScanLine, X, AlertTriangle, Loader2, Upload,
+} from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 
 const GAMMES = [
   'Boissons énergétiques', 'Alcools', 'Confiseries',
@@ -39,14 +44,16 @@ function detecterGamme(categoriesTags = []) {
   return 'Autres'
 }
 
-export default function Catalogue() {
+export default function Gestion() {
   const { role, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
-  const [produits, setProduits]           = useState([])
-  const [dlcParProduit, setDlcParProduit] = useState({})
-  const [loading, setLoading]             = useState(true)
-  const [recherche, setRecherche]         = useState('')
+  const [produits, setProduits] = useState([])
+  const [loading, setLoading]   = useState(true)
+
+  const [recherche, setRecherche]       = useState('')
+  const [gammeFiltre, setGammeFiltre]   = useState('')
+  const [statutFiltre, setStatutFiltre] = useState('')
 
   const [modalOuvert, setModalOuvert]       = useState(false)
   const [produitEnCours, setProduitEnCours] = useState(null)
@@ -62,52 +69,32 @@ export default function Catalogue() {
   const [offLoading, setOffLoading] = useState(false)
   const [offMessage, setOffMessage] = useState('')
 
-  // filtre statut — new minimal state
-  const [filtre, setFiltre] = useState('tous')
-
   useEffect(() => {
     if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
       navigate('/ruptures', { replace: true })
     }
   }, [role, authLoading, navigate])
 
-  useEffect(() => {
-    fetchProduits()
-  }, [])
+  useEffect(() => { fetchProduits() }, [])
 
   async function fetchProduits() {
-    const [{ data, error }, { data: dlcData }] = await Promise.all([
-      supabase
-        .from('produits')
-        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente')
-        .order('designation'),
-      supabase.from('stock_dlc').select('*'),
-    ])
-    if (error) console.error('[Catalogue] Supabase :', error.message)
+    const { data, error } = await supabase
+      .from('produits')
+      .select('id, code, designation, gamme, st_actuel, st_min, pr_vente')
+      .order('designation')
+    if (error) console.error('[Gestion] Supabase :', error.message)
     else setProduits(data)
-
-    const map = {}
-    dlcData?.forEach(entry => {
-      const existing = map[entry.produit_id]
-      if (!existing || entry.dlc < existing.dlc) map[entry.produit_id] = entry
-    })
-    setDlcParProduit(map)
     setLoading(false)
   }
 
-  // Délai 50 ms : attend que React ait monté le <video> dans le DOM avant de
-  // passer la ref à ZXing. Absorbe aussi le double-fire de StrictMode en dev.
+  // Délai 50 ms : attend que React ait monté le <video> avant de passer à ZXing
   useEffect(() => {
     if (!scannerOuvert) return
-
     let cancelled = false
-
     const timer = setTimeout(() => {
       if (cancelled || !videoRef.current) return
-
       const reader = new BrowserMultiFormatReader()
       readerRef.current = reader
-
       reader.decodeFromConstraints(
         { video: { facingMode: { ideal: 'environment' } } },
         videoRef.current,
@@ -117,7 +104,6 @@ export default function Catalogue() {
           reader.reset()
           readerRef.current = null
           setScannerOuvert(false)
-
           const code = result.getText()
           setForm(f => ({ ...f, code }))
           setOffMessage('')
@@ -128,14 +114,10 @@ export default function Catalogue() {
         if (!cancelled) setScannerOuvert(false)
       })
     }, 50)
-
     return () => {
       cancelled = true
       clearTimeout(timer)
-      if (readerRef.current) {
-        readerRef.current.reset()
-        readerRef.current = null
-      }
+      if (readerRef.current) { readerRef.current.reset(); readerRef.current = null }
     }
   }, [scannerOuvert])
 
@@ -153,7 +135,7 @@ export default function Catalogue() {
           gamme:       detecterGamme(p.categories_tags),
         }))
       } else {
-        setOffMessage('Produit non trouvé dans la base Open Food Facts')
+        setOffMessage('Produit non trouvé dans Open Food Facts')
       }
     } catch {
       setOffMessage('Erreur lors de la recherche Open Food Facts')
@@ -194,7 +176,6 @@ export default function Catalogue() {
   async function sauvegarder(e) {
     e.preventDefault()
     setSaving(true)
-
     const payload = {
       designation: form.designation.trim(),
       gamme:       form.gamme,
@@ -203,13 +184,11 @@ export default function Catalogue() {
       st_min:      parseFloat(form.st_min) || 0,
       pr_vente:    parseFloat(form.pr_vente),
     }
-
     const { error } = produitEnCours
       ? await supabase.from('produits').update(payload).eq('id', produitEnCours.id)
       : await supabase.from('produits').insert(payload)
-
     if (error) {
-      console.error('[Catalogue] Sauvegarde :', error.message)
+      console.error('[Gestion] Sauvegarde :', error.message)
     } else {
       await fetchProduits()
       fermerModal()
@@ -219,31 +198,20 @@ export default function Catalogue() {
 
   async function supprimer(id) {
     const { error } = await supabase.from('produits').delete().eq('id', id)
-    if (error) { console.error('[Catalogue] Suppression :', error.message); return }
+    if (error) { console.error('[Gestion] Suppression :', error.message); return }
     setProduits(prev => prev.filter(p => p.id !== id))
     setConfirmSupp(null)
   }
 
-  const produitsFiltres = useMemo(() =>
-    produits.filter(p =>
-      p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
-    ),
-    [produits, recherche]
-  )
-
-  // counts derived from full produits list (unaffected by recherche)
-  const nbRuptures = produits.filter(p => p.st_actuel === 0).length
-  const nbFaibles  = produits.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min).length
-  const nbOk       = produits.filter(p => p.st_actuel >= p.st_min).length
-
-  // apply status filtre on top of text search
-  const produitsFiltresAvecStatut = useMemo(() => {
-    if (filtre === 'tous') return produitsFiltres
-    if (filtre === 'rupture') return produitsFiltres.filter(p => p.st_actuel === 0)
-    if (filtre === 'faible')  return produitsFiltres.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min)
-    if (filtre === 'ok')      return produitsFiltres.filter(p => p.st_actuel >= p.st_min)
-    return produitsFiltres
-  }, [produitsFiltres, filtre])
+  const produitsFiltres = useMemo(() => {
+    return produits.filter(p => {
+      const matchTexte = p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
+      const matchGamme = !gammeFiltre || p.gamme === gammeFiltre
+      const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+      const matchStatut = !statutFiltre || statut === statutFiltre
+      return matchTexte && matchGamme && matchStatut
+    })
+  }, [produits, recherche, gammeFiltre, statutFiltre])
 
   if (authLoading || loading) {
     return (
@@ -255,70 +223,42 @@ export default function Catalogue() {
 
   if (!role || (role !== 'manager' && role !== 'gerant')) return null
 
+  const selectCls = 'bg-white border border-bitume/10 rounded-2xl px-3 py-3 text-sm text-bitume outline-none focus:border-paname-700 transition-colors appearance-none cursor-pointer'
+
   return (
     <div className="pb-20">
 
-      {/* ── TOP SECTION ───────────────────────────────────────────────────── */}
-      <div className="px-4 pt-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="tag-street text-zinc-400">CATALOGUE</p>
-            <p className="font-display text-3xl font-bold text-bitume">{produits.length} produits</p>
-          </div>
-          <button
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <p className="tag-street text-zinc-400">CRUD · {produits.length} PRODUITS</p>
+          <p className="font-display text-3xl font-bold text-bitume">Gestion produits</p>
+        </div>
+        <div className="flex gap-2 pt-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1.5"
+          >
+            <Upload size={14} />
+            IMPORT
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={ouvrirAjout}
-            className="w-10 h-10 rounded-2xl bg-paname-700 text-white flex items-center justify-center shadow-paname"
+            className="flex items-center gap-1.5"
           >
-            <Plus size={20} />
-          </button>
+            <Plus size={14} />
+            NOUVEAU
+          </Button>
         </div>
+      </div>
 
-        {/* ── FILTER PILLS ──────────────────────────────────────────────── */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
-          <button
-            onClick={() => setFiltre('tous')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'tous'
-                ? 'bg-bitume text-white border-bitume'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            TOUS
-          </button>
-          <button
-            onClick={() => setFiltre('rupture')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'rupture'
-                ? 'bg-pavillon text-white border-pavillon shadow-rouge'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            RUPTURES {nbRuptures > 0 && `· ${nbRuptures}`}
-          </button>
-          <button
-            onClick={() => setFiltre('faible')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'faible'
-                ? 'bg-eiffel text-yellow-950 border-eiffel shadow-or'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            INSUFF. {nbFaibles > 0 && `· ${nbFaibles}`}
-          </button>
-          <button
-            onClick={() => setFiltre('ok')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'ok'
-                ? 'bg-signal text-white border-signal'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            EN STOCK {nbOk > 0 && `· ${nbOk}`}
-          </button>
-        </div>
-
-        {/* ── SEARCH BAR ────────────────────────────────────────────────── */}
-        <div className="relative mb-4">
+      {/* ── FILTRES ────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+        <div className="relative md:col-span-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
           <input
             type="text"
@@ -328,77 +268,150 @@ export default function Catalogue() {
             className="w-full pl-10 pr-4 py-3 bg-white border border-bitume/10 rounded-2xl text-sm outline-none focus:border-paname-700 transition-colors"
           />
         </div>
+        <select value={gammeFiltre} onChange={e => setGammeFiltre(e.target.value)} className={selectCls}>
+          <option value="">Toutes gammes</option>
+          {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select value={statutFiltre} onChange={e => setStatutFiltre(e.target.value)} className={selectCls}>
+          <option value="">Tous statuts</option>
+          <option value="rupture">Rupture</option>
+          <option value="faible">Insuffisant</option>
+          <option value="ok">En stock</option>
+        </select>
       </div>
 
-      {/* ── LISTE ─────────────────────────────────────────────────────────── */}
-      <div className="px-4 space-y-2">
-        {produitsFiltresAvecStatut.length === 0 && (
+      {/* ── TABLE DESKTOP (md+) ────────────────────────────────────────────── */}
+      <div className="hidden md:block">
+        <div className="bg-white rounded-2xl border border-bitume/5 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-calcaire border-b border-bitume/5">
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Produit</th>
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Code-barres</th>
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Gamme</th>
+                <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Stock</th>
+                <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Prix</th>
+                <th className="tag-street text-zinc-500 text-center px-4 py-3 font-normal">Statut</th>
+                <th className="px-4 py-3 w-20" />
+              </tr>
+            </thead>
+            <tbody>
+              {produitsFiltres.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-4 py-16 text-center">
+                    <p className="text-3xl mb-2">📦</p>
+                    <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT</p>
+                    <p className="font-mono text-[10px] text-zinc-400">
+                      Modifie les filtres ou ajoute un produit
+                    </p>
+                  </td>
+                </tr>
+              )}
+              {produitsFiltres.map(p => {
+                const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+                const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
+                return (
+                  <tr key={p.id} className="border-t border-zinc-100 hover:bg-zinc-50 transition-colors">
+                    <td className="px-4 py-3 font-display font-bold text-sm text-bitume max-w-[200px] truncate">
+                      {p.designation}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
+                      {p.code ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">
+                      {p.gamme}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <span className={`font-mono tabular font-bold text-sm ${stockColor}`}>
+                        {p.st_actuel}
+                      </span>
+                      <span className="font-mono text-[10px] text-zinc-400">/{p.st_min}</span>
+                    </td>
+                    <td className="px-4 py-3 font-mono tabular text-sm font-semibold text-bitume text-right whitespace-nowrap">
+                      {p.pr_vente?.toFixed(2)} €
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge variant={statut}>
+                        {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => ouvrirModif(p)}
+                          aria-label="Modifier"
+                          className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmSupp(p)}
+                          aria-label="Supprimer"
+                          className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── CARDS MOBILE (<md) ─────────────────────────────────────────────── */}
+      <div className="md:hidden space-y-2">
+        {produitsFiltres.length === 0 && (
           <div className="text-center py-16">
-            <p className="tag-street text-zinc-400 mb-2">AUCUN PRODUIT</p>
-            <p className="text-sm text-zinc-400">Modifie les filtres ou ajoute un produit</p>
+            <p className="text-3xl mb-2">📦</p>
+            <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT</p>
+            <p className="font-mono text-[10px] text-zinc-400">
+              Modifie les filtres ou ajoute un produit
+            </p>
           </div>
         )}
-
-        {produitsFiltresAvecStatut.map(p => {
-          const statut = p.st_actuel === 0
-            ? 'rupture'
-            : p.st_actuel < p.st_min
-              ? 'faible'
-              : 'ok'
-
-          const dlcEntry = dlcParProduit[p.id]
-          const dlcBadge = dlcEntry ? (() => {
-            const [yyyy, mm, dd] = dlcEntry.dlc.split('-')
-            const label = `${dd}/${mm}/${yyyy}`
-            const today = new Date(); today.setHours(0, 0, 0, 0)
-            const dlcDate = new Date(dlcEntry.dlc); dlcDate.setHours(0, 0, 0, 0)
-            const jours = Math.ceil((dlcDate - today) / 86400000)
-            if (jours < 3)  return { label, cls: 'text-pavillon', prefix: '⚠ DLC : ' }
-            if (jours < 14) return { label, cls: 'text-eiffel',   prefix: '🕐 DLC : ' }
-            return              { label, cls: 'text-zinc-400',  prefix: 'DLC : ' }
-          })() : null
-
+        {produitsFiltres.map(p => {
+          const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+          const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
           return (
             <Card key={p.id} variant={statut === 'ok' ? 'default' : statut}>
               <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="font-display font-bold text-sm text-bitume truncate flex-1">{p.designation}</p>
+                <p className="font-display font-bold text-sm text-bitume truncate flex-1">
+                  {p.designation}
+                </p>
                 <Badge variant={statut}>
                   {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
                 </Badge>
               </div>
-
-              <p className="font-mono text-[10px] text-zinc-400 mb-2">
-                {p.gamme}
-                {p.code && ` · ${p.code}`}
-                {dlcBadge && (
-                  <span className={dlcBadge.cls}>{` · ${dlcBadge.prefix}${dlcBadge.label}`}</span>
-                )}
+              <p className="font-mono text-[10px] text-zinc-400 mb-3">
+                {p.gamme}{p.code && ` · ${p.code}`}
               </p>
-
-              <div className="flex items-end justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <span className={`font-display tabular text-3xl font-bold ${
-                    statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
-                  }`}>
+                  <span className={`font-display tabular text-2xl font-bold ${stockColor}`}>
                     {p.st_actuel}
                   </span>
                   <span className="font-mono text-zinc-400 text-xs">/{p.st_min} min</span>
+                  <span className="font-display tabular text-lg font-bold text-bitume ml-3">
+                    {p.pr_vente?.toFixed(2)} €
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-display tabular text-xl font-bold text-bitume">{p.pr_vente?.toFixed(2)} €</span>
+                <div className="flex gap-2 shrink-0">
                   <button
                     onClick={() => ouvrirModif(p)}
                     aria-label="Modifier"
-                    className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl border-2 border-bitume/10 tag-street text-bitume hover:bg-bitume/5 transition"
                   >
-                    <Pencil size={15} />
+                    <Pencil size={12} /> MODIF.
                   </button>
                   <button
                     onClick={() => setConfirmSupp(p)}
                     aria-label="Supprimer"
-                    className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-pavillon/10 border border-pavillon/20 tag-street text-pavillon hover:bg-pavillon/20 transition"
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               </div>
@@ -407,7 +420,7 @@ export default function Catalogue() {
         })}
       </div>
 
-      {/* ── MODAL AJOUT / MODIFICATION ────────────────────────────────────── */}
+      {/* ── MODAL AJOUT / MODIFICATION ─────────────────────────────────────── */}
       {modalOuvert && (
         <div
           className="fixed inset-0 z-[55] bg-black/50 flex items-end sm:items-center sm:justify-center"
@@ -419,13 +432,12 @@ export default function Catalogue() {
               <h2 className="font-display font-bold text-lg text-bitume">
                 {produitEnCours ? 'Modifier le produit' : 'Ajouter un produit'}
               </h2>
-              <button onClick={fermerModal} className="p-2 rounded-xl bg-bitume/5 text-bitume">
+              <button onClick={fermerModal} aria-label="Fermer" className="p-2 rounded-xl bg-bitume/5 text-bitume">
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={sauvegarder} className="flex-1 flex flex-col overflow-hidden">
-
               <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
 
                 <div>
@@ -443,7 +455,9 @@ export default function Catalogue() {
                 </div>
 
                 <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Gamme</label>
+                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
+                    Gamme
+                  </label>
                   <select
                     value={form.gamme}
                     onChange={e => setForm(f => ({ ...f, gamme: e.target.value }))}
@@ -501,7 +515,6 @@ export default function Catalogue() {
                       Recherche Open Food Facts…
                     </div>
                   )}
-
                   {offMessage && (
                     <p className="text-eiffel text-xs mt-1">{offMessage}</p>
                   )}
@@ -509,7 +522,9 @@ export default function Catalogue() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Stock actuel</label>
+                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
+                      Stock actuel
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -521,7 +536,9 @@ export default function Catalogue() {
                     />
                   </div>
                   <div>
-                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Stock minimum</label>
+                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
+                      Stock minimum
+                    </label>
                     <input
                       type="number"
                       min="0"
@@ -552,7 +569,6 @@ export default function Catalogue() {
 
               </div>
 
-              {/* pb-16 = hauteur bottom nav mobile, sm:pb-5 sur desktop */}
               <div className="flex gap-3 px-4 pt-3 pb-16 sm:pb-5 border-t border-bitume/5 shrink-0">
                 <button
                   type="button"
@@ -569,13 +585,12 @@ export default function Catalogue() {
                   {saving ? 'Sauvegarde…' : produitEnCours ? 'Enregistrer' : 'Ajouter'}
                 </button>
               </div>
-
             </form>
           </div>
         </div>
       )}
 
-      {/* ── DIALOG CONFIRMATION SUPPRESSION ───────────────────────────────── */}
+      {/* ── DIALOG CONFIRMATION SUPPRESSION ──────────────────────────────────── */}
       {confirmSupp && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-6">
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 border border-bitume/10">

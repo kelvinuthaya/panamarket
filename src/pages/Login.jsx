@@ -1,3 +1,13 @@
+// Login PANAME OS — dark mode avec splashes décoratifs + form blanc qui pop
+//
+// LOGIQUE PRÉSERVÉE (étape 4 migration) :
+// - 4 useState : identifiant, password, error, loading
+// - handleSubmit async : email = `${identifiant.trim()}@panamarket.fr`,
+//   supabase.auth.signInWithPassword, gestion erreur identique
+// - Le suffixe @panamarket.fr est concaténé automatiquement → on garde
+//   l'indice visuel (sinon l'user tape son email complet et le login casse)
+// - onAuthStateChange dans AuthContext gère la redirection après succès
+
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -21,65 +31,118 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 w-full max-w-sm">
+    <div className="relative min-h-[100dvh] bg-bitume flex items-center justify-center px-4 overflow-hidden">
 
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-800">Panam'arket</h1>
-          <p className="text-sm text-gray-500 mt-1">Connectez-vous pour continuer</p>
+      {/* Splashes SVG décoratifs — 3 coins, opacity faible pour rester en arrière-plan */}
+      <svg
+        className="absolute -top-32 -left-32 w-96 h-96 pointer-events-none"
+        viewBox="0 0 200 200"
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id="splash-rouge" cx="50%" cy="50%">
+            <stop offset="0%" stopColor="#FF2D2D" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#FF2D2D" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="100" r="100" fill="url(#splash-rouge)" />
+      </svg>
+
+      <svg
+        className="absolute -bottom-40 -right-32 w-[28rem] h-[28rem] pointer-events-none"
+        viewBox="0 0 200 200"
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id="splash-bleu" cx="50%" cy="50%">
+            <stop offset="0%" stopColor="#2557FF" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#2557FF" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="100" r="100" fill="url(#splash-bleu)" />
+      </svg>
+
+      <svg
+        className="absolute top-1/3 -right-24 w-72 h-72 pointer-events-none"
+        viewBox="0 0 200 200"
+        aria-hidden="true"
+      >
+        <defs>
+          <radialGradient id="splash-or" cx="50%" cy="50%">
+            <stop offset="0%" stopColor="#F5C518" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#F5C518" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="100" cy="100" r="100" fill="url(#splash-or)" />
+      </svg>
+
+      {/* Bloc central */}
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
+
+        {/* Logo + lieu */}
+        <div className="text-center">
+          <h1 className="font-display text-6xl font-bold text-white leading-none">
+            Panam
+            {/* "arket" en italic + gradient bleu→violet via bg-clip-text */}
+            <span className="italic bg-gradient-to-r from-paname-700 to-violet-600 bg-clip-text text-transparent">
+              'arket
+            </span>
+          </h1>
+          <p className="tag-street text-eiffel mt-3">75020 · BELLEVILLE · OS</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* Carte formulaire */}
+        <div className="w-full bg-white rounded-3xl p-6 shadow-paname">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Identifiant
-            </label>
-            {/* Le domaine @panamarket.fr est ajouté automatiquement — l'utilisateur tape juste son prénom/rôle */}
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden focus-within:border-[#1D9E75] focus-within:ring-1 focus-within:ring-[#1D9E75]">
+            {/* Identifiant — pas de label, juste placeholder + suffixe @panamarket.fr en hint mono
+                (suffixe nécessaire pour que l'user comprenne ce qu'il doit taper) */}
+            <div>
               <input
                 type="text"
                 value={identifiant}
                 onChange={e => setIdentifiant(e.target.value)}
                 placeholder="employe, manager, gérant…"
-                className="flex-1 px-3 py-2.5 text-sm outline-none"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume placeholder:text-zinc-400 transition-colors"
                 required
                 autoComplete="username"
                 autoCapitalize="none"
               />
-              <span className="px-3 py-2.5 text-xs text-gray-400 bg-gray-50 flex items-center border-l border-gray-200 whitespace-nowrap">
-                @panamarket.fr
-              </span>
+              <p className="font-mono text-[10px] text-zinc-400 mt-1">@panamarket.fr ajouté auto</p>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm rounded-lg border border-gray-200 outline-none focus:border-[#1D9E75] focus:ring-1 focus:ring-[#1D9E75]"
-              required
-              autoComplete="current-password"
-            />
-          </div>
+            <div>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Mot de passe"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume placeholder:text-zinc-400 transition-colors"
+                required
+                autoComplete="current-password"
+              />
+            </div>
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-          )}
+            {error && (
+              <p className="text-sm text-pavillon bg-pavillon/10 px-3 py-2 rounded-lg">
+                {error}
+              </p>
+            )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-2 bg-[#1D9E75] text-white py-2.5 rounded-lg text-sm font-semibold disabled:opacity-60 transition-opacity"
-          >
-            {loading ? 'Connexion…' : 'Se connecter'}
-          </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 w-full py-3.5 rounded-2xl bg-gradient-to-r from-paname-700 to-paname-500 text-white font-bold tag-street shadow-paname disabled:opacity-60 transition"
+            >
+              {loading ? 'Connexion…' : 'Entrer'}
+            </button>
+          </form>
+        </div>
 
-        </form>
+        {/* Footer signature */}
+        <p className="font-mono text-[10px] text-white/30 text-center">
+          v1.4.0 · NF 525 ready · Made in 75020
+        </p>
       </div>
     </div>
   )

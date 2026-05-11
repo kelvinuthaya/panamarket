@@ -13,29 +13,37 @@ import {
   Package, FileText, FileSpreadsheet, Receipt, ShoppingCart,
 } from 'lucide-react'
 
-// Couleurs et libellés des 4 tranches de TVA pour le graphique empilé
-const TVA_CONFIG = {
-  alim:   { label: 'Alimentation 5,5%', color: '#1D9E75' },
-  alcool: { label: 'Alcools 20%',       color: '#F59E0B' },
-  resto:  { label: 'Restauration 10%',  color: '#378ADD' },
-  flask:  { label: 'Flask 2%',          color: '#8B5CF6' },
+// Correspondances mois FR → numéro (1–12) et → index Date (0–11)
+const MOIS_NUM = {
+  janvier: 1, février: 2, fevrier: 2, mars: 3, avril: 4, mai: 5,
+  juin: 6, juillet: 7, août: 8, aout: 8, septembre: 9, octobre: 10,
+  novembre: 11, décembre: 12, decembre: 12,
+}
+const MOIS_IDX = {
+  janvier: 0, février: 1, fevrier: 1, mars: 2, avril: 3, mai: 4,
+  juin: 5, juillet: 6, août: 7, aout: 7, septembre: 8, octobre: 9,
+  novembre: 10, décembre: 11, decembre: 11,
 }
 
 export default function Dashboard() {
-  const { role, loading: authLoading } = useAuth()
+  const { role, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
 
   const [produits, setProduits]               = useState([])
   const [transactions, setTransactions]       = useState([])
+  const [caImporte, setCaImporte]             = useState([])
   const [loading, setLoading]                 = useState(true)
   const [migrationFaite, setMigrationFaite]   = useState(false)
   const [moisSelectionne, setMoisSelectionne] = useState(
     new Date().toLocaleDateString('en-CA').slice(0, 7)
   )
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  // Données importées depuis les fichiers locaux du gérant
-  const [donneesPdf, setDonneesPdf] = useState(null) // résultat de parsePdfCA
-  const [donneesCsv, setDonneesCsv] = useState(null) // résultat de parseCsvCA
+  // États session — affichent les métriques du dernier import dans la session
+  const [donneesPdf, setDonneesPdf] = useState({
+    caParJour: {}, top5: [], nbTransactions: 0, panierMoyen: 0, labelMois: '',
+  })
+  const [donneesCsv, setDonneesCsv] = useState({ caParJour: {}, caParTva: {} })
   const [labelPdf, setLabelPdf]     = useState('')
   const [labelCsv, setLabelCsv]     = useState('')
   const [errImport, setErrImport]   = useState('')
@@ -57,7 +65,10 @@ export default function Dashboard() {
       const finMois = new Date(annee, mois, 0)
       finMois.setHours(23, 59, 59, 999)
 
-      const [txnResult, produitsResult] = await Promise.all([
+      const premierJour = new Date(annee, mois - 1, 1).toISOString().slice(0, 10)
+      const dernierJour = new Date(annee, mois, 0).toISOString().slice(0, 10)
+
+      const [txnResult, produitsResult, caImporteResult] = await Promise.all([
         supabase
           .from('transactions')
           .select('total, created_at, produits')
@@ -68,20 +79,56 @@ export default function Dashboard() {
           .from('produits')
           .select('id, designation, gamme, st_actuel, st_min, pr_vente')
           .order('designation'),
+        supabase
+          .from('ca_importe')
+          .select('*')
+          .gte('jour', premierJour)
+          .lte('jour', dernierJour)
+          .order('jour', { ascending: true }),
       ])
 
-      if (!txnResult.error)      setTransactions(txnResult.data ?? [])
-      if (!produitsResult.error) setProduits(produitsResult.data ?? [])
+      if (!txnResult.error)       setTransactions(txnResult.data ?? [])
+      if (!produitsResult.error)  setProduits(produitsResult.data ?? [])
+      if (!caImporteResult.error) setCaImporte(caImporteResult.data ?? [])
       setLoading(false)
     }
     fetchData()
-  }, [moisSelectionne])
+  }, [moisSelectionne, refreshKey])
 
   useEffect(() => {
     if (localStorage.getItem('migration_v1_done')) setMigrationFaite(true)
   }, [])
 
-  // ── Import PDF ───────────────────────────────────────────────────────────────
+  // Enregistre les CA journaliers dans Supabase (table ca_importe)
+  async function saveImportToSupabase(caParJour, source, labelMois, meta) {
+    const parts = labelMois.trim().toLowerCase().split(/\s+/)
+    const moisNum = MOIS_NUM[parts[0]]
+    const annee = parseInt(parts[1])
+    if (!moisNum || isNaN(annee)) return { success: false, error: new Error('labelMois invalide') }
+
+    const rows = Object.entries(caParJour).map(([cle, ca]) => {
+      const [dd, mm] = cle.split('/')
+      const jour = `${annee}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+      return {
+        source,
+        label_mois: labelMois,
+        jour,
+        ca,
+        nb_transactions: meta.nbTransactions ?? null,
+        panier_moyen:    meta.panierMoyen    ?? null,
+        imported_by:     user?.id            ?? null,
+      }
+    })
+
+    if (rows.length === 0) return { success: true, error: null }
+
+    const { error } = await supabase
+      .from('ca_importe')
+      .upsert(rows, { onConflict: 'source,jour' })
+
+    return { success: !error, error: error ?? null }
+  }
+
   async function handleImportPdf(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -90,15 +137,30 @@ export default function Dashboard() {
       const data = await parsePdfCA(file)
       setDonneesPdf(data)
       setLabelPdf(data.labelMois)
+
+      const { error } = await saveImportToSupabase(
+        data.caParJour, 'pdf', data.labelMois,
+        { nbTransactions: data.nbTransactions, panierMoyen: data.panierMoyen }
+      )
+      if (error) {
+        console.error('Erreur sauvegarde Supabase:', error)
+      } else {
+        const parts = data.labelMois.trim().toLowerCase().split(/\s+/)
+        const moisIdx = MOIS_IDX[parts[0]]
+        const annee = parseInt(parts[1])
+        if (moisIdx !== undefined && !isNaN(annee)) {
+          const d = new Date(annee, moisIdx, 1)
+          setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
+        }
+        setRefreshKey(k => k + 1)
+      }
     } catch (err) {
       console.error('[Import PDF]', err)
       setErrImport(`Erreur PDF : ${err.message}`)
     }
-    // Réinitialiser l'input pour pouvoir réimporter le même fichier
     e.target.value = ''
   }
 
-  // ── Import CSV ───────────────────────────────────────────────────────────────
   async function handleImportCsv(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -106,7 +168,20 @@ export default function Dashboard() {
     try {
       const data = await parseCsvCA(file)
       setDonneesCsv(data)
-      setLabelCsv(data.labelMois)
+
+      const [y, m] = moisSelectionne.split('-').map(Number)
+      const labelMoisCsv = new Date(y, m - 1, 15)
+        .toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+      setLabelCsv(labelMoisCsv)
+
+      const { error } = await saveImportToSupabase(
+        data.caParJour, 'csv', labelMoisCsv, {}
+      )
+      if (error) {
+        console.error('Erreur sauvegarde Supabase:', error)
+      } else {
+        setRefreshKey(k => k + 1)
+      }
     } catch (err) {
       console.error('[Import CSV]', err)
       setErrImport(`Erreur CSV : ${err.message}`)
@@ -147,18 +222,13 @@ export default function Dashboard() {
     alert(`Migration réussie — ${inserts.length} transaction(s) transférée(s) vers Supabase.`)
   }
 
-  const todayFr = new Date().toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+  const labelMoisAffiche = new Date(moisSelectionne + '-15')
+    .toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 
-  // ── CA du mois : CSV si disponible, sinon Supabase ────────────────────────
   const caMois = useMemo(() => {
-    if (donneesCsv) {
-      return Object.values(donneesCsv.donneesParJour)
-        .reduce((s, d) => s + d.alim + d.alcool + d.resto + d.flask, 0)
-    }
+    if (caImporte.length > 0) return caImporte.reduce((s, r) => s + r.ca, 0)
     return transactions.reduce((sum, t) => sum + t.total, 0)
-  }, [transactions, donneesCsv])
+  }, [transactions, caImporte])
 
   const articlesMois = useMemo(() =>
     transactions.reduce((sum, t) =>
@@ -177,33 +247,38 @@ export default function Dashboard() {
     [produits]
   )
 
-  // ── Graphique : CSV → BarChart empilé TVA ; sinon CA simple ──────────────
   const donneesGraphique = useMemo(() => {
-    if (donneesCsv) {
-      return Object.entries(donneesCsv.donneesParJour)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([jour, d]) => ({
-          jour,
-          alim:   parseFloat(d.alim.toFixed(2)),
-          alcool: parseFloat(d.alcool.toFixed(2)),
-          resto:  parseFloat(d.resto.toFixed(2)),
-          flask:  parseFloat(d.flask.toFixed(2)),
-        }))
-    }
-    const parJour = {}
+    const [annee, mois] = moisSelectionne.split('-').map(Number)
+    const nbJours = new Date(annee, mois, 0).getDate()
+
+    const caAppParJour = {}
     transactions.forEach(t => {
       const d = new Date(t.created_at)
       const jour = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
-      parJour[jour] = (parJour[jour] ?? 0) + t.total
+      caAppParJour[jour] = (caAppParJour[jour] ?? 0) + t.total
     })
-    return Object.entries(parJour)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([jour, ca]) => ({ jour, ca: parseFloat(ca.toFixed(2)) }))
-  }, [transactions, donneesCsv])
 
-  // ── Top 5 : PDF si disponible, sinon Supabase ─────────────────────────────
+    const caImpParJour = {}
+    caImporte.forEach(row => {
+      const [, mm, dd] = row.jour.split('-')
+      const jour = `${dd}/${mm}`
+      caImpParJour[jour] = (caImpParJour[jour] ?? 0) + row.ca
+    })
+
+    const points = []
+    for (let j = 1; j <= nbJours; j++) {
+      const dd = String(j).padStart(2, '0')
+      const mm = String(mois).padStart(2, '0')
+      const jour = `${dd}/${mm}`
+      const caApp = parseFloat((caAppParJour[jour] ?? 0).toFixed(2))
+      const caImp = parseFloat((caImpParJour[jour] ?? 0).toFixed(2))
+      if (caApp > 0 || caImp > 0) points.push({ jour, caApp, caImporte: caImp })
+    }
+    return points
+  }, [transactions, caImporte, moisSelectionne])
+
   const top5 = useMemo(() => {
-    if (donneesPdf) return donneesPdf.top5
+    if (donneesPdf.top5.length > 0) return donneesPdf.top5
     const totals = {}
     transactions.forEach(t => {
       t.produits.forEach(p => {
@@ -225,48 +300,200 @@ export default function Dashboard() {
     [produits]
   )
 
+  // Entrées TVA si dispo depuis import CSV
+  const tvaEntries = useMemo(() => {
+    const tva = donneesCsv.caParTva
+    if (!tva || Object.keys(tva).length === 0) return []
+    return Object.entries(tva)
+      .map(([taux, ca]) => ({ taux, ca }))
+      .sort((a, b) => parseFloat(a.taux) - parseFloat(b.taux))
+  }, [donneesCsv])
+
   if (authLoading || loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-gray-400 text-sm">
-        Chargement…
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="tag-street text-eiffel">CHARGEMENT…</p>
       </div>
     )
   }
 
   const peutImporter = role === 'manager' || role === 'gerant'
 
+  // Labels des mois prev/next pour le sélecteur
+  const [yr, mo] = moisSelectionne.split('-').map(Number)
+  const prevMoisLabel = new Date(yr, mo - 2, 1)
+    .toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '').toUpperCase()
+  const nextMoisLabel = new Date(yr, mo, 1)
+    .toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '').toUpperCase()
+  const isCurrentMonth = moisSelectionne >= new Date().toLocaleDateString('en-CA').slice(0, 7)
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="pb-20">
+      <div className="px-4 pt-4 max-w-5xl mx-auto space-y-5">
 
-      {/* ── HEADER ────────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <h1 className="text-lg font-semibold text-gray-800">Dashboard</h1>
-        <p className="text-xs text-gray-400 capitalize">{todayFr}</p>
-      </header>
+        {/* PAGE HEADER */}
+        <div>
+          <p className="tag-street text-zinc-400">PANAM'ARKET · 75020</p>
+          <p className="font-display text-3xl font-bold text-bitume">Dashboard</p>
+        </div>
 
-      <div className="p-4 max-w-5xl mx-auto space-y-6">
-
-        {/* ── MIGRATION ONE-TIME ────────────────────────────────────────────── */}
+        {/* MIGRATION BANNER */}
         {!migrationFaite && role === 'gerant' && (
           <button
             onClick={migrerLocalStorage}
-            className="w-full bg-orange-500 text-white py-3 rounded-xl text-sm font-semibold"
+            className="w-full bg-pavillon text-white py-3 rounded-xl tag-street shadow-rouge"
           >
-            ⚠️ Migrer les données existantes vers Supabase (une seule fois)
+            ⚠ MIGRER LES DONNÉES VERS SUPABASE (UNE SEULE FOIS)
           </button>
         )}
 
-        {/* ── IMPORT DONNÉES HISTORIQUES ─────────────────────────────────────
-            Visible uniquement pour manager et gérant.
-            Les fichiers ne quittent pas le navigateur : tout se passe en local. */}
-        {peutImporter && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">
-              Importer données caisse
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
+        {/* SÉLECTEUR DE MOIS */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const d = new Date(yr, mo - 2, 1)
+              setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
+            }}
+            className="flex-1 py-2.5 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition hover:border-paname-700/30"
+          >
+            ◀ {prevMoisLabel}
+          </button>
+          <div className="flex-[2] py-2.5 bg-gradient-to-r from-paname-700 to-paname-500 text-white rounded-xl tag-street text-center shadow-paname">
+            {labelMoisAffiche.toUpperCase()}
+          </div>
+          <button
+            onClick={() => {
+              const d = new Date(yr, mo, 1)
+              setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
+            }}
+            disabled={isCurrentMonth}
+            className="flex-1 py-2.5 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition hover:border-paname-700/30 disabled:opacity-30"
+          >
+            {nextMoisLabel} ▶
+          </button>
+        </div>
 
-              {/* Bouton PDF */}
+        {/* HERO POSTER — CA du mois */}
+        <div className="bg-paname-700 rounded-3xl p-6 text-white relative overflow-hidden">
+          {/* Déco : énorme € en arrière-plan */}
+          <div
+            className="absolute -right-6 -top-10 font-display font-bold text-white/10 leading-none select-none pointer-events-none"
+            style={{ fontSize: '180px' }}
+            aria-hidden="true"
+          >€</div>
+          {/* Splash doré en bas-gauche */}
+          <svg
+            className="absolute bottom-0 left-0 w-32 h-32 opacity-40 pointer-events-none"
+            viewBox="0 0 100 100"
+            aria-hidden="true"
+          >
+            <defs>
+              <radialGradient id="heroSplash">
+                <stop offset="0%" stopColor="#F5C518" stopOpacity="1" />
+                <stop offset="100%" stopColor="#F5C518" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="0" cy="100" r="80" fill="url(#heroSplash)" />
+          </svg>
+
+          <div className="relative z-10">
+            <p className="tag-street text-white/60 mb-2">CA · {labelMoisAffiche.toUpperCase()}</p>
+
+            <div className="flex items-end gap-1 mb-3">
+              <span
+                className="font-display font-bold tabular leading-none"
+                style={{ fontSize: '56px' }}
+              >
+                {Math.floor(caMois).toLocaleString('fr-FR')}
+              </span>
+              <span className="font-display text-3xl font-bold text-eiffel mb-1">
+                ,{String(Math.round((caMois % 1) * 100)).padStart(2, '0')} €
+              </span>
+            </div>
+
+            {caImporte.length > 0 ? (
+              <p className="tag-street text-blue-200">SOURCE IMPORTÉE · {caImporte.length} JOURS</p>
+            ) : transactions.length > 0 ? (
+              <p className="tag-street text-blue-200">
+                {transactions.length} TRANSACTION{transactions.length > 1 ? 'S' : ''} APP
+              </p>
+            ) : (
+              <p className="tag-street text-white/40">AUCUNE DONNÉE CE MOIS</p>
+            )}
+
+            {/* Répartition TVA si dispo depuis CSV */}
+            {tvaEntries.length > 0 && (
+              <div className="mt-4 border-t border-white/10 pt-4 space-y-1.5">
+                <p className="tag-street text-white/40 mb-2">RÉPARTITION TVA</p>
+                {tvaEntries.map(({ taux, ca }, i) => {
+                  const dotColors = ['bg-eiffel', 'bg-paname-100', 'bg-blue-300']
+                  return (
+                    <div key={taux} className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${dotColors[i] ?? 'bg-white/40'}`} />
+                      <span className="font-mono text-[10px] text-white/60 flex-1">TVA {taux} %</span>
+                      <span className="font-mono tabular text-[10px] font-bold text-white">
+                        {parseFloat(ca).toFixed(2)} €
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Métriques PDF si dispo */}
+            {donneesPdf.nbTransactions > 0 && (
+              <div className="mt-4 flex gap-6 border-t border-white/10 pt-4">
+                <div>
+                  <p className="tag-street text-white/40">TRANSACTIONS</p>
+                  <p className="font-display font-bold tabular text-white">{donneesPdf.nbTransactions}</p>
+                </div>
+                {donneesPdf.panierMoyen > 0 && (
+                  <div>
+                    <p className="tag-street text-white/40">PANIER MOYEN</p>
+                    <p className="font-display font-bold tabular text-eiffel">
+                      {donneesPdf.panierMoyen.toFixed(2)} €
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 3 STAT CARDS */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-bitume/5 p-4">
+            <p className="tag-street text-zinc-400 mb-2">ARTICLES</p>
+            <p className="font-display text-3xl font-bold tabular text-bitume">{articlesMois}</p>
+            <p className="font-mono text-[10px] text-zinc-400 mt-1">vendus</p>
+          </div>
+
+          <div className="bg-pavillon rounded-2xl p-4 text-white relative overflow-hidden">
+            <div
+              className="absolute -right-1 -bottom-4 font-display font-bold text-white/10 leading-none select-none pointer-events-none"
+              style={{ fontSize: '72px' }}
+              aria-hidden="true"
+            >{nbRuptures}</div>
+            <p className="tag-street text-white/70 mb-2">RUPTURES</p>
+            <p className="relative font-display text-3xl font-bold tabular">{nbRuptures}</p>
+          </div>
+
+          <div className="bg-eiffel rounded-2xl p-4 text-yellow-950 relative overflow-hidden">
+            <div
+              className="absolute -right-1 -bottom-4 font-display font-bold text-yellow-950/10 leading-none select-none pointer-events-none"
+              style={{ fontSize: '72px' }}
+              aria-hidden="true"
+            >{nbInsuffisants}</div>
+            <p className="tag-street text-yellow-950/70 mb-2">FAIBLES</p>
+            <p className="relative font-display text-3xl font-bold tabular">{nbInsuffisants}</p>
+          </div>
+        </div>
+
+        {/* IMPORT DONNÉES CAISSE */}
+        {peutImporter && (
+          <div className="bg-white rounded-2xl border border-bitume/5 p-4">
+            <p className="tag-street text-zinc-400 mb-3">IMPORT DONNÉES CAISSE</p>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <input
                   type="file"
@@ -277,19 +504,18 @@ export default function Dashboard() {
                 />
                 <button
                   onClick={() => pdfRef.current.click()}
-                  className="w-full flex flex-col items-center gap-2 bg-[#1D9E75]/10 text-[#1D9E75] border border-[#1D9E75]/30 rounded-xl px-3 py-4 text-xs font-semibold active:bg-[#1D9E75]/20 transition-colors"
+                  className="w-full flex flex-col items-center gap-2 bg-paname-700/5 text-paname-700 border border-paname-700/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-700/10"
                 >
                   <FileText size={20} />
-                  PDF transactions
+                  PDF TRANSACTIONS
                 </button>
                 {labelPdf && (
-                  <p className="text-xs text-[#1D9E75] mt-1.5 text-center font-medium">
-                    ✓ {labelPdf} chargé
+                  <p className="font-mono text-[10px] text-paname-700 mt-1.5 text-center">
+                    ✓ {labelPdf}
                   </p>
                 )}
               </div>
 
-              {/* Bouton CSV */}
               <div>
                 <input
                   type="file"
@@ -300,154 +526,74 @@ export default function Dashboard() {
                 />
                 <button
                   onClick={() => csvRef.current.click()}
-                  className="w-full flex flex-col items-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl px-3 py-4 text-xs font-semibold active:bg-blue-100 transition-colors"
+                  className="w-full flex flex-col items-center gap-2 bg-paname-500/5 text-paname-500 border border-paname-500/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-500/10"
                 >
                   <FileSpreadsheet size={20} />
-                  CSV TVA
+                  CSV CA
                 </button>
                 {labelCsv && (
-                  <p className="text-xs text-blue-600 mt-1.5 text-center font-medium">
-                    ✓ {labelCsv} chargé
+                  <p className="font-mono text-[10px] text-paname-500 mt-1.5 text-center">
+                    ✓ {labelCsv}
                   </p>
                 )}
               </div>
             </div>
 
             {errImport && (
-              <p className="mt-3 text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2">
+              <p className="mt-3 font-mono text-[10px] text-pavillon bg-pavillon/5 rounded-xl px-3 py-2">
                 {errImport}
               </p>
             )}
-          </section>
-        )}
-
-        {/* ── 4 CARDS MÉTRIQUES ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard
-            label={donneesCsv ? `CA ${labelCsv}` : 'CA du mois'}
-            value={`${caMois.toFixed(2)} €`}
-            color="text-[#1D9E75]"
-            bg="bg-green-50"
-            Icon={TrendingUp}
-          />
-          <MetricCard
-            label="Articles vendus"
-            value={articlesMois}
-            color="text-blue-500"
-            bg="bg-blue-50"
-            Icon={ShoppingBag}
-          />
-          <MetricCard
-            label="Ruptures"
-            value={nbRuptures}
-            color="text-red-500"
-            bg="bg-red-50"
-            Icon={AlertTriangle}
-          />
-          <MetricCard
-            label="Stocks insuffisants"
-            value={nbInsuffisants}
-            color="text-orange-500"
-            bg="bg-orange-50"
-            Icon={AlertCircle}
-          />
-        </div>
-
-        {/* Métriques supplémentaires depuis le PDF (nb transactions + panier moyen) */}
-        {donneesPdf && (
-          <div className="grid grid-cols-2 gap-3">
-            <MetricCard
-              label="Transactions"
-              value={donneesPdf.nbTransactions}
-              color="text-purple-500"
-              bg="bg-purple-50"
-              Icon={Receipt}
-            />
-            {donneesPdf.panierMoyen !== null && (
-              <MetricCard
-                label="Panier moyen"
-                value={`${donneesPdf.panierMoyen.toFixed(2)} €`}
-                color="text-indigo-500"
-                bg="bg-indigo-50"
-                Icon={ShoppingCart}
-              />
-            )}
           </div>
         )}
 
-        {/* Accès rapide catalogue */}
-        <Link
-          to="/catalogue"
-          className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 hover:border-[#1D9E75]/40 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#1D9E75]/10 flex items-center justify-center">
-              <Package size={18} className="text-[#1D9E75]" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-800">Gérer le catalogue</p>
-              <p className="text-xs text-gray-400">Ajouter, modifier ou supprimer des produits</p>
-            </div>
-          </div>
-          <span className="text-gray-300 text-lg leading-none">›</span>
-        </Link>
-
-        {!donneesCsv && articlesMois === 0 && (
-          <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3 text-sm text-blue-700">
-            <span className="text-lg">ℹ️</span>
-            <span>
+        {/* STATE VIDE */}
+        {caImporte.length === 0 && articlesMois === 0 && (
+          <div className="flex items-center gap-3 bg-paname-700/5 border border-paname-700/10 rounded-2xl px-4 py-3">
+            <span className="text-lg shrink-0">ℹ️</span>
+            <p className="font-mono text-[10px] text-paname-700">
               Aucune vente enregistrée ce mois — les données CA et top produits
               apparaîtront dès la première saisie dans la Caisse.
-            </span>
+            </p>
           </div>
         )}
 
-        {/* ── GRILLE 2 COL DESKTOP ──────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ACCÈS RAPIDE CATALOGUE */}
+        <Link
+          to="/catalogue"
+          className="flex items-center justify-between bg-white rounded-2xl border border-bitume/5 px-4 py-3 hover:border-paname-700/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-paname-700/10 flex items-center justify-center">
+              <Package size={18} className="text-paname-700" />
+            </div>
+            <div>
+              <p className="font-display font-bold text-sm text-bitume">Gérer le catalogue</p>
+              <p className="font-mono text-[10px] text-zinc-400">
+                Ajouter, modifier ou supprimer des produits
+              </p>
+            </div>
+          </div>
+          <span className="text-zinc-300 text-xl leading-none">›</span>
+        </Link>
 
-          {/* GRAPHIQUE CA PAR JOUR DU MOIS */}
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">CA — jour par jour</h2>
+        {/* GRAPHIQUE + TOP 5 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {/* Sélecteur de mois — masqué si des données importées sont affichées */}
-            {!donneesCsv && (
-              <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-2">
-                <button
-                  onClick={() => {
-                    const [y, m] = moisSelectionne.split('-').map(Number)
-                    const d = new Date(y, m - 2, 1)
-                    setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
-                  }}
-                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 active:bg-gray-100"
-                >
-                  ‹
-                </button>
-                <span className="text-sm font-semibold text-gray-800 capitalize">
-                  {new Date(moisSelectionne + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-                </span>
-                <button
-                  onClick={() => {
-                    const [y, m] = moisSelectionne.split('-').map(Number)
-                    const d = new Date(y, m, 1)
-                    setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
-                  }}
-                  disabled={moisSelectionne >= new Date().toLocaleDateString('en-CA').slice(0, 7)}
-                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-600 active:bg-gray-100 disabled:opacity-30"
-                >
-                  ›
-                </button>
+          {/* GRAPHIQUE CA JOUR PAR JOUR */}
+          <div className="bg-white rounded-2xl border border-bitume/5 p-4">
+            <p className="tag-street text-zinc-400 mb-4">CA JOUR PAR JOUR</p>
+            {donneesGraphique.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-3xl mb-2">📊</p>
+                <p className="tag-street text-zinc-400 mb-1">AUCUNE DONNÉE</p>
+                <p className="font-mono text-[10px] text-zinc-400">
+                  Importez un PDF ou enregistrez des ventes
+                </p>
               </div>
-            )}
-
-            <p className="text-xs text-gray-500 mb-4">
-              CA du mois : <span className="font-bold text-[#1D9E75]">{caMois.toFixed(2)} €</span>
-              {donneesCsv && <span className="ml-1 text-blue-500">(source CSV)</span>}
-            </p>
-
-            <ResponsiveContainer width="100%" height={donneesCsv ? 220 : 200}>
-              {donneesCsv ? (
-                /* BarChart empilé — 4 séries TVA */
-                <BarChart data={donneesGraphique} barSize={20}>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={donneesGraphique} barSize={12}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis
                     dataKey="jour"
@@ -460,151 +606,108 @@ export default function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={v => `${v} €`}
-                    width={60}
+                    width={55}
                   />
                   <Tooltip
-                    formatter={(v, key) => [`${parseFloat(v).toFixed(2)} €`, TVA_CONFIG[key]?.label ?? key]}
+                    formatter={(v, key) => [
+                      `${parseFloat(v).toFixed(2)} €`,
+                      key === 'caApp' ? 'Ventes app' : 'Historique caisse',
+                    ]}
                     contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }}
-                    cursor={{ fill: '#F3F4F6' }}
+                    cursor={{ fill: '#F5F4EE' }}
                   />
                   <Legend
-                    formatter={key => TVA_CONFIG[key]?.label ?? key}
+                    formatter={key => key === 'caApp' ? 'Ventes app' : 'Historique caisse'}
                     iconType="circle"
                     iconSize={8}
                     wrapperStyle={{ fontSize: 11 }}
                   />
-                  {/* Les 3 premières barres sans arrondi, la dernière arrondie en haut */}
-                  <Bar dataKey="alim"   stackId="a" fill={TVA_CONFIG.alim.color}   radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="alcool" stackId="a" fill={TVA_CONFIG.alcool.color} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="resto"  stackId="a" fill={TVA_CONFIG.resto.color}  radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="flask"  stackId="a" fill={TVA_CONFIG.flask.color}  radius={[6, 6, 0, 0]} />
+                  {/* Couleurs PANAME OS : paname-700 pour app, pavillon pour historique */}
+                  <Bar dataKey="caApp"     name="Ventes app"        fill="#0040DD" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="caImporte" name="Historique caisse" fill="#FF2D2D" radius={[4, 4, 0, 0]} />
                 </BarChart>
-              ) : (
-                /* BarChart simple — comportement original */
-                <BarChart data={donneesGraphique} barSize={28}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-                  <XAxis
-                    dataKey="jour"
-                    tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={v => `${v} €`}
-                    width={60}
-                  />
-                  <Tooltip
-                    formatter={v => [`${v.toFixed(2)} €`, 'CA']}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }}
-                    cursor={{ fill: '#F3F4F6' }}
-                  />
-                  <Bar dataKey="ca" fill="#1D9E75" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </section>
-
-          {/* TOP 5 PRODUITS DU MOIS */}
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">
-              Top 5 produits du mois
-            </h2>
-            {donneesPdf && (
-              <p className="text-xs text-[#1D9E75] mb-3">source PDF — {labelPdf}</p>
+              </ResponsiveContainer>
             )}
-            {!donneesPdf && <div className="mb-3" />}
+          </div>
 
+          {/* TOP 5 PRODUITS */}
+          <div className="bg-white rounded-2xl border border-bitume/5 p-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="tag-street text-zinc-400">TOP 5 PRODUITS</p>
+              {donneesPdf.top5.length > 0 && (
+                <p className="font-mono text-[10px] text-paname-700">{labelPdf}</p>
+              )}
+            </div>
             {top5.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">
-                Aucune vente enregistrée ce mois.
-              </p>
+              <div className="text-center py-12">
+                <p className="text-3xl mb-2">🏆</p>
+                <p className="tag-street text-zinc-400 mb-1">AUCUNE VENTE CE MOIS</p>
+                <p className="font-mono text-[10px] text-zinc-400">
+                  Les top produits s'afficheront ici
+                </p>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div>
                 {top5.map((p, i) => (
-                  <div key={p.designation} className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-gray-100 text-xs font-bold text-gray-500 flex items-center justify-center shrink-0">
+                  <div key={p.designation} className="flex items-center gap-3 py-2.5 border-t border-zinc-50">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-[10px] font-bold shrink-0 ${
+                      i === 0 ? 'bg-eiffel text-yellow-950' : 'bg-zinc-100 text-zinc-500'
+                    }`}>
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">
-                        {p.designation}
+                      <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
+                      <p className="font-mono text-[10px] text-zinc-400">
+                        {p.qte} unité{p.qte > 1 ? 's' : ''}
                       </p>
-                      <p className="text-xs text-gray-400">{p.qte} unité{p.qte > 1 ? 's' : ''}</p>
                     </div>
-                    <span className="text-sm font-semibold text-[#1D9E75] shrink-0">
+                    <span className="font-mono tabular text-sm font-bold text-paname-700 shrink-0">
                       {p.ca.toFixed(2)} €
                     </span>
                   </div>
                 ))}
               </div>
             )}
-          </section>
+          </div>
+        </div>
 
-          {/* ÉTAT DES STOCKS — occupe 2 colonnes sur desktop */}
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-700">État des stocks</h2>
-              <Link
-                to="/catalogue"
-                className="text-xs text-[#1D9E75] font-medium hover:underline"
-              >
-                Voir tout →
+        {/* ÉTAT DES STOCKS ALERTES */}
+        {alertesStock.length > 0 && (
+          <div className="bg-white rounded-2xl border border-bitume/5 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="tag-street text-zinc-400">ÉTAT DES STOCKS</p>
+              <Link to="/catalogue" className="tag-street text-paname-700">
+                VOIR TOUT →
               </Link>
             </div>
-
-            {alertesStock.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                Tous les stocks sont OK.
-              </p>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {alertesStock.map(p => {
-                  const rupture = p.st_actuel === 0
-                  return (
-                    <div key={p.id} className="flex items-center justify-between py-3">
-                      <div className="flex-1 min-w-0 mr-3">
-                        <p className="text-sm font-medium text-gray-800 truncate">
-                          {p.designation}
-                        </p>
-                        <p className="text-xs text-gray-400">{p.gamme}</p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-gray-500">
-                          {p.st_actuel} / {p.st_min}
-                        </span>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          rupture
-                            ? 'bg-red-100 text-red-600'
-                            : 'bg-orange-100 text-orange-600'
-                        }`}>
-                          {rupture ? 'Rupture' : 'Insuffisant'}
-                        </span>
-                      </div>
+            <div className="divide-y divide-zinc-50">
+              {alertesStock.map(p => {
+                const rupture = p.st_actuel === 0
+                return (
+                  <div key={p.id} className="flex items-center justify-between py-3">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <p className="font-display font-bold text-sm text-bitume truncate">
+                        {p.designation}
+                      </p>
+                      <p className="font-mono text-[10px] text-zinc-400">{p.gamme}</p>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </section>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="font-mono tabular text-[10px] text-zinc-500">
+                        {p.st_actuel}/{p.st_min}
+                      </span>
+                      <span className={`tag-street px-2 py-1 rounded-md ${
+                        rupture ? 'bg-pavillon text-white' : 'bg-eiffel text-yellow-950'
+                      }`}>
+                        {rupture ? 'RUPTURE' : 'INSUFF.'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MetricCard({ label, value, color, bg, Icon }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3">
-      <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center`}>
-        <Icon size={18} className={color} />
-      </div>
-      <div>
-        <p className="text-xs text-gray-400">{label}</p>
-        <p className={`text-xl font-bold ${color}`}>{value}</p>
       </div>
     </div>
   )

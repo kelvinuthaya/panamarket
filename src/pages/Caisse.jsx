@@ -1,8 +1,25 @@
+// Caisse PANAME OS — refonte dark mode (étape 4 migration)
+//
+// LOGIQUE PRÉSERVÉE :
+// • State : produits, panier, transactions, recherche, loading, modePaiement,
+//   montantRecu, showRecap, showConfirmVider, showConfirmCloturer, toast,
+//   favoris (Set localStorage), sectionOuvertes (Set), scannerOuvert
+// • Refs : videoRef, readerRef, produitRefs, loadedRef
+// • useEffects : init (load produits + panier localStorage + transactions du jour),
+//   ouverture sections au 1er chargement, persist panier, toast auto-dismiss 2.5s,
+//   scanner ZXing (decodeFromConstraints + cleanup)
+// • Functions : toggleFavori, toggleSection, changer, validerVente,
+//   supprimerTransaction, viderPanier, cloturerJournee, genererPDF, envoyerEmail
+// • Sub-components : CarteProduit, SectionCategorie
+//
+// AJOUTÉ (purement décoratif, pas de logique métier) :
+// • horloge (useState + useEffect setInterval 60s)
+
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import jsPDF from 'jspdf'
-import { Search, Plus, Minus, FileText, Mail, ClipboardList, X, AlertTriangle, ScanLine, Trash2 } from 'lucide-react'
+import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2 } from 'lucide-react'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -10,19 +27,153 @@ const todayFr = new Date().toLocaleDateString('fr-FR', {
 })
 const STORAGE_KEY_PANIER = `caisse_${today}`
 
+// "MODE SOIR" / "MODE JOUR" selon l'heure — purement cosmétique
+const getMode = () => {
+  const h = new Date().getHours()
+  return h >= 17 || h < 6 ? 'MODE SOIR' : 'MODE JOUR'
+}
+const getHorloge = () =>
+  new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+
+// ── Carte produit (mode browse) — version dark ─────────────────────────────
+function CarteProduit({ p, qte, onChanger, estFavori, onToggleFavori, innerRef }) {
+  return (
+    <div
+      ref={innerRef}
+      className="relative bg-bitume-2 rounded-xl border border-white/5 px-3 py-2.5"
+    >
+      {/* Étoile favori — eiffel si épinglé, blanc dim sinon */}
+      <button
+        onClick={() => onToggleFavori(p.id)}
+        className={`absolute top-1 right-1 text-sm leading-none transition-colors ${
+          estFavori ? 'text-eiffel' : 'text-white/20 hover:text-white/40'
+        }`}
+        title={estFavori ? 'Retirer des favoris' : 'Épingler'}
+      >
+        {estFavori ? '★' : '☆'}
+      </button>
+
+      <div className="pr-5">
+        <p className="text-sm font-medium text-white truncate">{p.designation}</p>
+        <p className="font-mono text-[10px] text-zinc-500">{p.pr_vente.toFixed(2)} €/u</p>
+      </div>
+
+      <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onChanger(-1)}
+            disabled={qte === 0}
+            className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white disabled:opacity-25 active:bg-white/10"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="font-display tabular w-5 text-center text-sm font-bold text-white">
+            {qte}
+          </span>
+          <button
+            onClick={() => onChanger(+1)}
+            className="w-8 h-8 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 flex items-center justify-center text-white"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        <span className={`text-xs font-semibold tabular ${qte > 0 ? 'text-eiffel' : 'text-white/15'}`}>
+          {(qte * p.pr_vente).toFixed(2)} €
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Ligne panier (section PANIER en haut) — pleine largeur, plus large que carte
+function LignePanier({ p, qte, onChanger }) {
+  return (
+    <div className="bg-bitume-2 rounded-2xl p-3 border border-white/5 flex items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <p className="font-display font-bold text-sm text-white truncate">{p.designation}</p>
+        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+          {p.pr_vente.toFixed(2)} €/u · TVA 20%
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={() => onChanger(-1)}
+          className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10"
+          aria-label="Retirer un"
+        >
+          <Minus size={14} />
+        </button>
+        <span className="font-display tabular text-lg font-bold w-6 text-center text-white">
+          {qte}
+        </span>
+        <button
+          onClick={() => onChanger(+1)}
+          className="w-8 h-8 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 text-white flex items-center justify-center"
+          aria-label="Ajouter un"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Section dépliable par catégorie — version dark ─────────────────────────
+function SectionCategorie({ titre, variant = 'default', produits, ouverte, onToggle, renderCarte }) {
+  const headerCls =
+    variant === 'favoris'
+      ? 'bg-eiffel/10 border-eiffel/30 text-eiffel'
+      : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+
+  return (
+    <div className="mb-3">
+      <button
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between px-4 py-2.5 border rounded-xl transition ${headerCls}`}
+      >
+        <span className="tag-street">
+          {variant === 'favoris' && '★ '}
+          {titre}
+          <span className="ml-2 opacity-50">({produits.length})</span>
+        </span>
+        <span className={`text-xs transition-transform inline-block ${ouverte ? 'rotate-180' : ''}`}>
+          ▼
+        </span>
+      </button>
+      {ouverte && (
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          {produits.map(renderCarte)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Caisse() {
-  const [produits, setProduits]   = useState([])
-  const [panier, setPanier]       = useState({})        // { [id]: quantite } — temporaire
-  const [transactions, setTransactions] = useState([]) // ventes validées de la journée
-  const [recherche, setRecherche] = useState('')
-  const [loading, setLoading]     = useState(true)
-  const [modePaiement, setModePaiement] = useState('cb') // 'cb' | 'especes'
+  const [produits, setProduits]         = useState([])
+  const [panier, setPanier]             = useState({})
+  const [transactions, setTransactions] = useState([])
+  const [recherche, setRecherche]       = useState('')
+  const [loading, setLoading]           = useState(true)
+  const [modePaiement, setModePaiement] = useState('cb')
   const [montantRecu, setMontantRecu]   = useState('')
 
-  const [showRecap, setShowRecap]                   = useState(false)
-  const [showConfirmVider, setShowConfirmVider]     = useState(false)
+  const [showRecap, setShowRecap]                     = useState(false)
+  const [showConfirmVider, setShowConfirmVider]       = useState(false)
   const [showConfirmCloturer, setShowConfirmCloturer] = useState(false)
   const [toast, setToast] = useState('')
+
+  // Horloge — décorative uniquement (étape 4 PANAME OS)
+  const [horloge, setHorloge] = useState(getHorloge)
+
+  // Favoris persistés en localStorage (Set d'ids)
+  const [favoris, setFavoris] = useState(() => {
+    const saved = localStorage.getItem('caisse_favoris')
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  })
+
+  // Sections dépliées — les gammes s'ajoutent automatiquement au premier chargement
+  const [sectionOuvertes, setSectionOuvertes] = useState(() => new Set(['favoris']))
 
   // Scanner
   const [scannerOuvert, setScannerOuvert] = useState(false)
@@ -50,7 +201,6 @@ export default function Caisse() {
           }
         } catch {}
 
-        // Fetch transactions du jour depuis Supabase
         const debutJour = new Date()
         debutJour.setHours(0, 0, 0, 0)
         const { data: txnData } = await supabase
@@ -75,7 +225,15 @@ export default function Caisse() {
     init()
   }, [])
 
-  // ── Persistance localStorage ───────────────────────────────────────────────
+  // Ouvrir toutes les sections au premier chargement des produits
+  useEffect(() => {
+    if (produits.length > 0 && sectionOuvertes.size <= 1) {
+      const gammes = [...new Set(produits.map(p => p.gamme || 'Autre'))]
+      setSectionOuvertes(new Set(['favoris', ...gammes]))
+    }
+  }, [produits])
+
+  // ── Persistance localStorage panier ───────────────────────────────────────
   useEffect(() => {
     if (!loadedRef.current) return
     localStorage.setItem(STORAGE_KEY_PANIER, JSON.stringify({ panier, modePaiement }))
@@ -87,6 +245,12 @@ export default function Caisse() {
     const t = setTimeout(() => setToast(''), 2500)
     return () => clearTimeout(t)
   }, [toast])
+
+  // ── Horloge (refresh chaque minute) — décoratif ────────────────────────────
+  useEffect(() => {
+    const t = setInterval(() => setHorloge(getHorloge()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   // ── Scanner ZXing ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -141,6 +305,11 @@ export default function Caisse() {
     [produits, recherche]
   )
 
+  const gammes = useMemo(() =>
+    [...new Set(produits.map(p => p.gamme || 'Autre'))].sort(),
+    [produits]
+  )
+
   const articlesEnPanier = useMemo(() =>
     produits.filter(p => (panier[p.id] ?? 0) > 0),
     [produits, panier]
@@ -160,6 +329,24 @@ export default function Caisse() {
     const recu = parseFloat(montantRecu)
     return !isNaN(recu) && recu >= totalPanier ? (recu - totalPanier).toFixed(2) : null
   }, [montantRecu, totalPanier])
+
+  // ── Favoris ────────────────────────────────────────────────────────────────
+  function toggleFavori(id) {
+    setFavoris(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      localStorage.setItem('caisse_favoris', JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  function toggleSection(gamme) {
+    setSectionOuvertes(prev => {
+      const next = new Set(prev)
+      next.has(gamme) ? next.delete(gamme) : next.add(gamme)
+      return next
+    })
+  }
 
   // ── Actions ────────────────────────────────────────────────────────────────
   function changer(id, delta) {
@@ -288,155 +475,208 @@ export default function Caisse() {
     window.location.href = `mailto:panamarket@gmail.com?subject=Caisse+${today}&body=${corps}`
   }
 
+  // ── Helper de rendu — carte liée aux états du panier et des favoris ────────
+  const renderCarte = (p) => (
+    <CarteProduit
+      key={p.id}
+      p={p}
+      qte={panier[p.id] ?? 0}
+      onChanger={(delta) => changer(p.id, delta)}
+      estFavori={favoris.has(p.id)}
+      onToggleFavori={toggleFavori}
+      innerRef={(el) => { produitRefs.current[p.id] = el }}
+    />
+  )
+
   // ── Guard ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-gray-400 text-sm">
-        Chargement…
+      <div className="-mx-4 -mt-4 md:-mt-6 bg-bitume min-h-[100dvh] flex items-center justify-center">
+        <p className="tag-street text-eiffel">CHARGEMENT…</p>
       </div>
     )
   }
 
+  const rechercheActive = recherche.trim() !== ''
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-96">
+    // -mx-4 -mt-4 md:-mt-6 : casse le padding d'AppShell pour s'étendre full bg-bitume
+    <div className="-mx-4 -mt-4 md:-mt-6 bg-bitume text-white min-h-[100dvh]">
 
       {/* ── TOAST ─────────────────────────────────────────────────────────────── */}
       {toast && (
-        <div className="fixed top-4 left-4 right-4 z-[60] bg-gray-800 text-white text-sm font-medium px-4 py-3 rounded-xl text-center shadow-lg pointer-events-none">
+        <div className="fixed top-4 left-4 right-4 z-[60] bg-eiffel text-yellow-950 font-bold tag-street px-4 py-3 rounded-2xl text-center shadow-or pointer-events-none">
           {toast}
         </div>
       )}
 
-      {/* ── HEADER ────────────────────────────────────────────────────────────── */}
-      <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
-        <div className="flex items-center justify-between">
+      {/* Padding intérieur — pb-[280px] réserve l'espace pour le footer sticky */}
+      <div className="px-4 pt-4 md:pt-6 pb-[280px]">
+
+        {/* ── HEADER : mode + horloge + RÉCAP ─────────────────────────────────── */}
+        <header className="flex items-center justify-between mb-5">
           <div>
-            <h1 className="text-lg font-semibold text-gray-800">Caisse</h1>
-            <p className="text-xs text-gray-400 capitalize">{todayFr}</p>
+            <p className="tag-street text-eiffel">CAISSE · {getMode()}</p>
+            <p className="font-display text-3xl font-bold text-white tabular leading-none mt-1">
+              {horloge}
+            </p>
           </div>
           <button
             onClick={() => setShowRecap(true)}
-            className="flex items-center gap-1.5 bg-gray-100 text-gray-600 px-3 py-2 rounded-xl text-xs font-medium"
+            className="bg-eiffel text-yellow-950 px-3 py-2 rounded-xl tag-street flex items-center gap-2 shadow-or"
           >
-            <ClipboardList size={15} />
-            Récap du jour
+            <span>📊 RÉCAP</span>
             {transactions.length > 0 && (
-              <span className="bg-[#1D9E75] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+              <span className="bg-yellow-950 text-eiffel px-1.5 py-0.5 rounded-md text-[10px] tabular leading-none">
                 {transactions.length}
               </span>
             )}
           </button>
-        </div>
+        </header>
 
-        {/* Recherche + scanner */}
-        <div className="flex gap-2 mt-3">
+        {/* ── SEARCH + SCAN ───────────────────────────────────────────────────── */}
+        <div className="flex gap-2 mb-4">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
             <input
               type="text"
               placeholder="Rechercher un produit…"
               value={recherche}
               onChange={e => setRecherche(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#1D9E75]"
+              className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-500 outline-none focus:border-paname-500 transition-colors"
             />
           </div>
           <button
             onClick={() => setScannerOuvert(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium shrink-0 transition-colors ${
-              scannerOuvert ? 'bg-gray-200 text-gray-600' : 'bg-[#1D9E75]/10 text-[#1D9E75]'
-            }`}
+            className="w-12 h-12 rounded-2xl bg-gradient-to-br from-paname-700 to-paname-500 shadow-paname text-white flex items-center justify-center shrink-0"
+            aria-label={scannerOuvert ? 'Fermer le scanner' : 'Scanner un produit'}
           >
-            <ScanLine size={16} />
-            {scannerOuvert ? 'Fermer' : 'Scanner'}
+            {scannerOuvert ? <X size={20} /> : <ScanLine size={20} />}
           </button>
         </div>
-      </header>
 
-      {/* ── ZONE CAMÉRA ───────────────────────────────────────────────────────── */}
-      {scannerOuvert && (
-        <div className="bg-white border-b border-gray-100 px-4 pb-4">
-          <div className="rounded-xl overflow-hidden border border-[#1D9E75]/30 bg-black">
+        {/* ── ZONE CAMÉRA ─────────────────────────────────────────────────────── */}
+        {scannerOuvert && (
+          <div className="mb-4 rounded-2xl overflow-hidden border border-white/10 bg-black">
             <video ref={videoRef} className="w-full" playsInline muted />
-            <p className="text-center text-xs text-gray-400 py-2 bg-white border-t border-gray-100">
-              Pointez la caméra vers le code-barres du produit
+            <p className="text-center font-mono text-[10px] text-zinc-400 py-2 bg-bitume-2 border-t border-white/10">
+              Pointez la caméra vers le code-barres
             </p>
           </div>
-        </div>
-      )}
-
-      {/* ── LISTE PRODUITS ────────────────────────────────────────────────────── */}
-      <div className="p-4 space-y-2">
-        {produitsFiltrés.length === 0 && (
-          <p className="text-center text-gray-400 mt-16 text-sm">Aucun produit trouvé.</p>
         )}
-        {produitsFiltrés.map(p => {
-          const qte = panier[p.id] ?? 0
-          return (
-            <div
-              key={p.id}
-              ref={el => { produitRefs.current[p.id] = el }}
-              className="bg-white rounded-xl border border-gray-100 px-4 py-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{p.designation}</p>
-                  <p className="text-xs text-gray-400">{p.gamme}</p>
-                </div>
-                <span className="text-xs text-gray-400 shrink-0 mt-0.5">{p.pr_vente.toFixed(2)} €/u</span>
-              </div>
-              <div className="flex items-center justify-between mt-2.5">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => changer(p.id, -1)}
-                    disabled={qte === 0}
-                    className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 disabled:opacity-25 active:bg-gray-50"
-                  >
-                    <Minus size={16} />
-                  </button>
-                  <span className="w-6 text-center text-sm font-semibold text-gray-800">{qte}</span>
-                  <button
-                    onClick={() => changer(p.id, +1)}
-                    className="w-9 h-9 rounded-lg bg-[#1D9E75] flex items-center justify-center text-white active:opacity-80"
-                  >
-                    <Plus size={16} />
-                  </button>
-                </div>
-                <span className={`text-sm font-semibold ${qte > 0 ? 'text-[#1D9E75]' : 'text-gray-200'}`}>
-                  {(qte * p.pr_vente).toFixed(2)} €
-                </span>
-              </div>
+
+        {/* ── PANIER (lignes pleine largeur) — visible si articles en cours ───── */}
+        {articlesEnPanier.length > 0 && (
+          <section className="mb-5">
+            <p className="tag-street text-zinc-500 mb-2">
+              PANIER · {articlesEnPanier.length} ARTICLE{articlesEnPanier.length !== 1 ? 'S' : ''}
+            </p>
+            <div className="space-y-2">
+              {articlesEnPanier.map(p => (
+                <LignePanier
+                  key={p.id}
+                  p={p}
+                  qte={panier[p.id]}
+                  onChanger={(delta) => changer(p.id, delta)}
+                />
+              ))}
             </div>
-          )
-        })}
+          </section>
+        )}
+
+        {/* ── BROWSE PRODUITS ─────────────────────────────────────────────────── */}
+        {/* Mode recherche — liste plate (comportement original) */}
+        {rechercheActive && (
+          <div>
+            <p className="tag-street text-zinc-500 mb-2">RÉSULTATS · {produitsFiltrés.length}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {produitsFiltrés.length === 0 ? (
+                <p className="col-span-2 text-center text-zinc-500 mt-8 text-sm">
+                  Aucun produit trouvé.
+                </p>
+              ) : (
+                produitsFiltrés.map(renderCarte)
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mode catégories — sections dépliables */}
+        {!rechercheActive && (
+          <>
+            <p className="tag-street text-zinc-500 mb-2">CATALOGUE</p>
+
+            {/* Section Favoris — visible uniquement si au moins un produit épinglé */}
+            {favoris.size > 0 && (
+              <SectionCategorie
+                titre="FAVORIS"
+                variant="favoris"
+                ouverte={sectionOuvertes.has('favoris')}
+                onToggle={() => toggleSection('favoris')}
+                produits={produits.filter(p => favoris.has(p.id))}
+                renderCarte={renderCarte}
+              />
+            )}
+
+            {/* Une section par gamme */}
+            {gammes.map((gamme) => (
+              <SectionCategorie
+                key={gamme}
+                titre={gamme.toUpperCase()}
+                ouverte={sectionOuvertes.has(gamme)}
+                onToggle={() => toggleSection(gamme)}
+                produits={produits.filter(p => (p.gamme || 'Autre') === gamme)}
+                renderCarte={renderCarte}
+              />
+            ))}
+          </>
+        )}
       </div>
 
-      {/* ── BARRE BAS ─────────────────────────────────────────────────────────── */}
-      <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-100 px-4 pt-3 pb-4">
+      {/* ── FOOTER STICKY ────────────────────────────────────────────────────────
+          fixed + bottom calc(64px + safe-area) pour passer au-dessus de la BottomNav.
+          md:!bottom-0 force bottom=0 sur desktop (pas de BottomNav, !important bat le inline style). */}
+      <div
+        className="fixed left-0 right-0 md:left-60 md:!bottom-0 z-30 bg-bitume-2 border-t-2 border-eiffel px-4 pt-3 pb-3"
+        style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
+      >
+        {/* Total */}
+        <div className="flex items-baseline justify-between mb-3">
+          <span className="tag-street text-zinc-500">TOTAL</span>
+          <span className="font-display text-4xl font-bold tabular text-white leading-none">
+            {totalPanier.toFixed(2)}
+            <span className="text-eiffel ml-1">€</span>
+          </span>
+        </div>
 
-        {/* Toggle CB / Espèces */}
-        <div className="flex gap-2 mb-3">
+        {/* CB / Espèces */}
+        <div className="flex gap-2 mb-2">
           <button
             onClick={() => setModePaiement('cb')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              modePaiement === 'cb' ? 'bg-[#1D9E75] text-white' : 'bg-gray-100 text-gray-500'
+            className={`flex-1 py-2.5 rounded-xl tag-street transition ${
+              modePaiement === 'cb'
+                ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                : 'bg-white/5 border border-white/10 text-white/60'
             }`}
           >
             💳 CB
           </button>
           <button
             onClick={() => setModePaiement('especes')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${
-              modePaiement === 'especes' ? 'bg-[#1D9E75] text-white' : 'bg-gray-100 text-gray-500'
+            className={`flex-1 py-2.5 rounded-xl tag-street transition ${
+              modePaiement === 'especes'
+                ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                : 'bg-white/5 border border-white/10 text-white/60'
             }`}
           >
-            💵 Espèces
+            💵 ESPÈCES
           </button>
         </div>
 
-        {/* Champ montant reçu + monnaie (espèces uniquement) */}
+        {/* Reçu — espèces uniquement */}
         {modePaiement === 'especes' && (
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-gray-500 shrink-0">Reçu</span>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-mono text-[10px] text-zinc-400 shrink-0">REÇU</span>
             <input
               type="number"
               min={totalPanier}
@@ -444,102 +684,96 @@ export default function Caisse() {
               value={montantRecu}
               onChange={e => setMontantRecu(e.target.value)}
               placeholder={totalPanier.toFixed(2)}
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-right outline-none focus:border-[#1D9E75]"
+              className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-right outline-none focus:border-paname-500 placeholder:text-zinc-500 tabular"
             />
             {monnaie !== null && (
               <div className="text-right shrink-0">
-                <p className="text-[10px] text-gray-400 leading-none mb-0.5">Monnaie</p>
-                <p className="text-sm font-bold text-[#1D9E75]">{monnaie} €</p>
+                <p className="font-mono text-[10px] text-zinc-400 leading-none">MONNAIE</p>
+                <p className="text-sm font-bold text-eiffel tabular">{monnaie} €</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Articles + total panier */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-gray-500">
-            {articlesEnPanier.length} article{articlesEnPanier.length !== 1 ? 's' : ''} au panier
-          </span>
-          <span className="text-xl font-bold text-gray-800">{totalPanier.toFixed(2)} €</span>
-        </div>
-
-        {/* Valider la vente */}
+        {/* Valider */}
         <button
           onClick={validerVente}
           disabled={articlesEnPanier.length === 0}
-          className="w-full bg-[#1D9E75] text-white py-3 rounded-xl text-sm font-bold disabled:opacity-30 active:opacity-80 mb-2"
+          className="w-full py-3.5 rounded-2xl bg-eiffel text-yellow-950 font-bold tag-street shadow-or disabled:opacity-30 transition"
         >
-          Valider la vente →
+          VALIDER LA VENTE →
         </button>
 
-        {/* Vider le panier */}
+        {/* Vider */}
         <button
           onClick={() => setShowConfirmVider(true)}
           disabled={articlesEnPanier.length === 0}
-          className="w-full border border-red-200 text-red-400 py-2.5 rounded-xl text-sm font-medium disabled:opacity-30 active:bg-red-50"
+          className="w-full mt-1.5 py-2 rounded-xl border border-pavillon/40 text-pavillon font-medium text-xs disabled:opacity-30 hover:bg-pavillon/10 transition"
         >
           Vider le panier
         </button>
       </div>
 
-      {/* ── OVERLAY RÉCAP ─────────────────────────────────────────────────────── */}
+      {/* ── OVERLAY RÉCAP (bottom sheet dark) ───────────────────────────────── */}
       {showRecap && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-end"
+          className="fixed inset-0 z-50 bg-black/60 flex items-end"
           onClick={e => { if (e.target === e.currentTarget) setShowRecap(false) }}
         >
-          <div className="bg-white w-full max-h-[85vh] rounded-t-2xl flex flex-col">
-
-            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100 shrink-0">
+          <div
+            className="bg-bitume-2 w-full max-h-[85vh] rounded-t-3xl flex flex-col border-t-2 border-eiffel md:ml-60"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">
               <div>
-                <h2 className="text-base font-semibold text-gray-800">Récap du jour</h2>
-                <p className="text-xs text-gray-400 capitalize">{todayFr}</p>
+                <p className="tag-street text-eiffel">RÉCAP DU JOUR</p>
+                <p className="font-mono text-[10px] text-zinc-400 capitalize mt-0.5">{todayFr}</p>
               </div>
-              <button onClick={() => setShowRecap(false)} className="p-2 rounded-xl bg-gray-100 text-gray-500">
+              <button
+                onClick={() => setShowRecap(false)}
+                className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
+                aria-label="Fermer"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            {/* Liste des transactions */}
             <div className="overflow-y-auto flex-1 p-4 space-y-3">
               {transactions.length === 0 ? (
-                <p className="text-center text-gray-400 py-8 text-sm">Aucune vente enregistrée aujourd'hui.</p>
+                <p className="text-center text-zinc-500 py-12 tag-street">
+                  AUCUNE VENTE AUJOURD'HUI
+                </p>
               ) : (
                 <>
                   {transactions.map((t, i) => (
-                    <div key={t.id} className="bg-gray-50 rounded-xl overflow-hidden">
-
-                      {/* En-tête de la transaction */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <div key={t.id} className="bg-bitume-3 rounded-2xl border border-white/5 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
                         <div>
-                          <p className="text-sm font-semibold text-gray-800">
+                          <p className="font-display font-bold text-sm text-white">
                             Vente #{i + 1}
-                            <span className="text-gray-400 font-normal"> · {t.heure}</span>
+                            <span className="text-zinc-500 font-normal font-mono text-[10px] ml-2">{t.heure}</span>
                           </p>
-                          <p className="text-xs text-gray-400">
+                          <p className="font-mono text-[10px] text-zinc-400">
                             {t.paiement === 'cb' ? '💳 CB' : '💵 Espèces'}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-gray-800">{t.total.toFixed(2)} €</span>
+                          <span className="font-display tabular text-base font-bold text-white">
+                            {t.total.toFixed(2)} €
+                          </span>
                           <button
                             onClick={() => supprimerTransaction(t.id)}
-                            className="p-1.5 rounded-lg bg-red-50 text-red-400 active:bg-red-100"
+                            className="p-1.5 rounded-lg bg-pavillon/20 text-pavillon hover:bg-pavillon/30"
                             aria-label="Supprimer cette transaction"
                           >
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
-
-                      {/* Lignes produits */}
                       {t.produits.map((p, j) => (
-                        <div
-                          key={j}
-                          className="flex items-center justify-between px-4 py-2 text-xs text-gray-600"
-                        >
+                        <div key={j} className="flex items-center justify-between px-4 py-2 text-xs text-zinc-400">
                           <span className="flex-1 truncate mr-2">{p.designation}</span>
-                          <span className="shrink-0 tabular-nums">
+                          <span className="shrink-0 font-mono tabular">
                             x{p.quantite} × {p.prixUnitaire.toFixed(2)} € = {(p.quantite * p.prixUnitaire).toFixed(2)} €
                           </span>
                         </div>
@@ -547,21 +781,23 @@ export default function Caisse() {
                     </div>
                   ))}
 
-                  {/* CA total journée */}
-                  <div className="bg-[#1D9E75] text-white rounded-xl px-4 py-4 flex justify-between items-center">
-                    <span className="text-sm font-semibold">CA de la journée</span>
-                    <span className="text-xl font-bold">{caJour.toFixed(2)} €</span>
+                  {/* CA bandeau gradient paname */}
+                  <div className="bg-gradient-to-r from-paname-700 to-paname-500 rounded-2xl px-4 py-4 flex justify-between items-center shadow-paname">
+                    <span className="tag-street text-white/80">CA DE LA JOURNÉE</span>
+                    <span className="font-display text-3xl font-bold tabular text-white">
+                      {caJour.toFixed(2)}
+                      <span className="text-eiffel ml-1">€</span>
+                    </span>
                   </div>
                 </>
               )}
             </div>
 
-            {/* Boutons d'action */}
-            <div className="px-4 pb-6 pt-3 border-t border-gray-100 space-y-2 shrink-0">
+            <div className="px-4 pt-3 pb-4 border-t border-white/10 space-y-2 shrink-0">
               <button
                 onClick={genererPDF}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-gray-800 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-40"
+                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-white/10 transition"
               >
                 <FileText size={18} />
                 Générer ticket PDF
@@ -569,22 +805,16 @@ export default function Caisse() {
               <button
                 onClick={envoyerEmail}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-40"
+                className="w-full flex items-center justify-center gap-2 bg-paname-700 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-paname-900 transition shadow-paname"
               >
                 <Mail size={18} />
                 Envoyer par email
               </button>
               <button
                 onClick={() => setShowConfirmCloturer(true)}
-                className="w-full border border-red-200 text-red-500 py-3 rounded-xl text-sm font-semibold active:bg-red-50"
+                className="w-full border border-pavillon/40 text-pavillon py-3 rounded-xl text-sm font-semibold hover:bg-pavillon/10 transition"
               >
                 Clôturer la journée
-              </button>
-              <button
-                onClick={() => setShowRecap(false)}
-                className="w-full border border-gray-200 text-gray-600 py-3 rounded-xl text-sm font-semibold"
-              >
-                Fermer
               </button>
             </div>
           </div>
@@ -593,28 +823,28 @@ export default function Caisse() {
 
       {/* ── CONFIRM : VIDER LE PANIER ─────────────────────────────────────────── */}
       {showConfirmVider && (
-        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-6">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
+          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                <AlertTriangle size={20} className="text-red-500" />
+              <div className="w-10 h-10 rounded-xl bg-pavillon/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-pavillon" />
               </div>
-              <h2 className="text-base font-semibold text-gray-800">Vider le panier ?</h2>
+              <h2 className="font-display font-bold text-base text-white">Vider le panier ?</h2>
             </div>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-zinc-400 mb-6">
               Les articles du panier en cours seront remis à zéro.
               Les ventes déjà enregistrées ne sont pas affectées.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmVider(false)}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
+                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
               >
                 Annuler
               </button>
               <button
                 onClick={viderPanier}
-                className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold"
+                className="flex-1 py-3 rounded-xl bg-pavillon text-white text-sm font-semibold shadow-rouge"
               >
                 Vider
               </button>
@@ -625,28 +855,28 @@ export default function Caisse() {
 
       {/* ── CONFIRM : CLÔTURER LA JOURNÉE ─────────────────────────────────────── */}
       {showConfirmCloturer && (
-        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-6">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
+          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                <AlertTriangle size={20} className="text-red-500" />
+              <div className="w-10 h-10 rounded-xl bg-pavillon/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-pavillon" />
               </div>
-              <h2 className="text-base font-semibold text-gray-800">Clôturer la journée ?</h2>
+              <h2 className="font-display font-bold text-base text-white">Clôturer la journée ?</h2>
             </div>
-            <p className="text-sm text-gray-500 mb-6">
+            <p className="text-sm text-zinc-400 mb-6">
               Toutes les transactions et le CA seront remis à zéro.
               Cette action est irréversible.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmCloturer(false)}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
+                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
               >
                 Annuler
               </button>
               <button
                 onClick={cloturerJournee}
-                className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold"
+                className="flex-1 py-3 rounded-xl bg-pavillon text-white text-sm font-semibold shadow-rouge"
               >
                 Clôturer
               </button>
@@ -654,7 +884,6 @@ export default function Caisse() {
           </div>
         </div>
       )}
-
     </div>
   )
 }
