@@ -27,6 +27,7 @@ const Ruptures = () => {
   const [produits, setProduits] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtre, setFiltre] = useState('tous')
+  const [visible, setVisible] = useState(20)
 
   useEffect(() => {
     async function fetchProduits() {
@@ -44,6 +45,8 @@ const Ruptures = () => {
     if (error) { console.error(error); return }
     setProduits(prev => prev.map(p => p.id === id ? { ...p, st_actuel: 0 } : p))
   }
+
+  useEffect(() => { setVisible(20) }, [filtre])
 
   const produitsFiltres = produits.filter((p) =>
     filtre === 'tous' ? true : getStatut(p) === filtre
@@ -82,7 +85,7 @@ const Ruptures = () => {
       </h2>
 
       <div className="flex flex-col gap-4">
-        {produitsFiltres.map((p) => (
+        {produitsFiltres.slice(0, visible).map((p) => (
           <ProduitCard
             key={p.id}
             designation={p.designation}
@@ -93,6 +96,14 @@ const Ruptures = () => {
             onSignalerRupture={() => signalerRupture(p.id)}
           />
         ))}
+        {visible < produitsFiltres.length && (
+          <button
+            onClick={() => setVisible(v => v + 20)}
+            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+          >
+            VOIR PLUS · {produitsFiltres.length - visible} restants
+          </button>
+        )}
       </div>
     </div>
   )

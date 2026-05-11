@@ -165,6 +165,7 @@ export default function Caisse() {
 
   // Horloge — décorative uniquement (étape 4 PANAME OS)
   const [horloge, setHorloge] = useState(getHorloge)
+  const [visible, setVisible] = useState(20)
 
   // Favoris persistés en localStorage (Set d'ids)
   const [favoris, setFavoris] = useState(() => {
@@ -252,6 +253,8 @@ export default function Caisse() {
     return () => clearInterval(t)
   }, [])
 
+  useEffect(() => { setVisible(20) }, [recherche])
+
   // ── Scanner ZXing ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!scannerOuvert) return
@@ -296,6 +299,50 @@ export default function Caisse() {
       if (readerRef.current) { readerRef.current.reset(); readerRef.current = null }
     }
   }, [scannerOuvert, produits])
+
+  // ── Scanner USB HID (clavier) ─────────────────────────────────────────────
+  // Un scanner USB envoie les caractères en < 80 ms puis un Enter.
+  // On accumule un buffer local tant que les touches arrivent vite.
+  // Si le focus est dans un INPUT/TEXTAREA on laisse passer la frappe normalement.
+  useEffect(() => {
+    let buffer  = ''
+    let lastKey = 0
+
+    function handleKeyDown(e) {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+
+      const now = Date.now()
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 6) {
+          const produit = produits.find(p => p.code === buffer)
+          if (produit) {
+            setPanier(prev => ({ ...prev, [produit.id]: (prev[produit.id] ?? 0) + 1 }))
+          } else {
+            setToast('Produit non reconnu')
+          }
+        }
+        buffer  = ''
+        lastKey = 0
+        return
+      }
+
+      if (e.key.length === 1) {
+        if (buffer.length === 0 || (now - lastKey) < 80) {
+          buffer  += e.key
+          lastKey  = now
+        } else {
+          // Délai > 80 ms : frappe humaine, on repart d'un nouveau buffer
+          buffer  = e.key
+          lastKey = now
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [produits])
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const produitsFiltrés = useMemo(() =>
@@ -595,9 +642,17 @@ export default function Caisse() {
                   Aucun produit trouvé.
                 </p>
               ) : (
-                produitsFiltrés.map(renderCarte)
+                produitsFiltrés.slice(0, visible).map(renderCarte)
               )}
             </div>
+            {visible < produitsFiltrés.length && (
+              <button
+                onClick={() => setVisible(v => v + 20)}
+                className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+              >
+                VOIR PLUS · {produitsFiltrés.length - visible} restants
+              </button>
+            )}
           </div>
         )}
 

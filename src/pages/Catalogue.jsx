@@ -1,5 +1,6 @@
 // PRESERVED: all state, useEffects, functions, useMemo, GAMMES, FORM_VIDE, detecterGamme
 import { useEffect, useRef, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
@@ -174,6 +175,7 @@ export default function Catalogue() {
     setScannerOuvert(false)
     setOffMessage('')
     setModalOuvert(true)
+    setTimeout(() => { document.getElementById('input-code-ean')?.focus() }, 100)
   }
 
   function ouvrirModif(p) {
@@ -189,6 +191,7 @@ export default function Catalogue() {
     setScannerOuvert(false)
     setOffMessage('')
     setModalOuvert(true)
+    setTimeout(() => { document.getElementById('input-code-ean')?.focus() }, 100)
   }
 
   async function sauvegarder(e) {
@@ -408,7 +411,7 @@ export default function Catalogue() {
       </div>
 
       {/* ── MODAL AJOUT / MODIFICATION ────────────────────────────────────── */}
-      {modalOuvert && (
+      {modalOuvert && createPortal(
         <div
           className="fixed inset-0 z-[55] bg-black/50 flex items-end sm:items-center sm:justify-center"
           onClick={e => { if (e.target === e.currentTarget) fermerModal() }}
@@ -459,6 +462,7 @@ export default function Catalogue() {
                   </label>
                   <div className="flex gap-2">
                     <input
+                      id="input-code-ean"
                       type="text"
                       value={form.code}
                       onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
@@ -573,10 +577,10 @@ export default function Catalogue() {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* ── DIALOG CONFIRMATION SUPPRESSION ───────────────────────────────── */}
-      {confirmSupp && (
+      {confirmSupp && createPortal(
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-6">
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 border border-bitume/10">
             <div className="flex items-center gap-3 mb-3">
@@ -605,7 +609,7 @@ export default function Catalogue() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
     </div>
   )

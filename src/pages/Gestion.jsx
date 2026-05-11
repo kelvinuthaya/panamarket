@@ -68,6 +68,7 @@ export default function Gestion() {
 
   const [offLoading, setOffLoading] = useState(false)
   const [offMessage, setOffMessage] = useState('')
+  const [visible, setVisible] = useState(20)
 
   useEffect(() => {
     if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
@@ -203,6 +204,8 @@ export default function Gestion() {
     setConfirmSupp(null)
   }
 
+  useEffect(() => { setVisible(20) }, [recherche, gammeFiltre, statutFiltre])
+
   const produitsFiltres = useMemo(() => {
     return produits.filter(p => {
       const matchTexte = p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
@@ -307,7 +310,7 @@ export default function Gestion() {
                   </td>
                 </tr>
               )}
-              {produitsFiltres.map(p => {
+              {produitsFiltres.slice(0, visible).map(p => {
                 const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
                 const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
                 return (
@@ -359,6 +362,14 @@ export default function Gestion() {
             </tbody>
           </table>
         </div>
+        {visible < produitsFiltres.length && (
+          <button
+            onClick={() => setVisible(v => v + 20)}
+            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+          >
+            VOIR PLUS · {produitsFiltres.length - visible} restants
+          </button>
+        )}
       </div>
 
       {/* ── CARDS MOBILE (<md) ─────────────────────────────────────────────── */}
@@ -372,7 +383,7 @@ export default function Gestion() {
             </p>
           </div>
         )}
-        {produitsFiltres.map(p => {
+        {produitsFiltres.slice(0, visible).map(p => {
           const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
           const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
           return (
@@ -418,6 +429,14 @@ export default function Gestion() {
             </Card>
           )
         })}
+        {visible < produitsFiltres.length && (
+          <button
+            onClick={() => setVisible(v => v + 20)}
+            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+          >
+            VOIR PLUS · {produitsFiltres.length - visible} restants
+          </button>
+        )}
       </div>
 
       {/* ── MODAL AJOUT / MODIFICATION ─────────────────────────────────────── */}
