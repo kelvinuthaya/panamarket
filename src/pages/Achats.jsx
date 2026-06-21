@@ -893,19 +893,17 @@ const Achats = () => {
         return
       }
 
-      // 3. Insérer les lignes DLC pour les items qui en ont une
-      const lignesDlc = receptionItems
-        .filter(item => item.dlc)
-        .map(item => ({
-          produit_id:  item.produit.id,
-          designation: item.produit.designation,
-          quantite:    item.qtRecue,
-          dlc:         convertirDlc(item.dlc),
-          livraison_id: livraison.id,
-        }))
+      // 3. Insérer toutes les lignes de réception (dlc = null si non renseignée)
+      const lignesRecues = receptionItems.map(item => ({
+        produit_id:  item.produit.id,
+        designation: item.produit.designation,
+        quantite:    item.qtRecue,
+        dlc:         item.dlc ? convertirDlc(item.dlc) : null,
+        livraison_id: livraison.id,
+      }))
 
-      if (lignesDlc.length > 0) {
-        await supabase.from('stock_dlc').insert(lignesDlc)
+      if (lignesRecues.length > 0) {
+        await supabase.from('stock_dlc').insert(lignesRecues)
       }
 
       // 4. Reset

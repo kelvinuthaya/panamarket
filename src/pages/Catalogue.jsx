@@ -16,7 +16,7 @@ const GAMMES = [
 
 const FORM_VIDE = {
   designation: '', gamme: 'Boissons énergétiques',
-  code: '', st_actuel: '', st_min: '', pr_vente: '',
+  code: '', st_actuel: '', st_min: '', pr_vente: '', pr_vente_especes: '',
 }
 
 function detecterGamme(categoriesTags = []) {
@@ -80,7 +80,7 @@ export default function Catalogue() {
     const [{ data, error }, { data: dlcData }] = await Promise.all([
       supabase
         .from('produits')
-        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente')
+        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente, pr_vente_especes')
         .order('designation'),
       supabase.from('stock_dlc').select('*'),
     ])
@@ -89,6 +89,7 @@ export default function Catalogue() {
 
     const map = {}
     dlcData?.forEach(entry => {
+      if (!entry.dlc) return // produit reçu sans DLC : pas de badge à afficher
       const existing = map[entry.produit_id]
       if (!existing || entry.dlc < existing.dlc) map[entry.produit_id] = entry
     })
@@ -181,12 +182,13 @@ export default function Catalogue() {
   function ouvrirModif(p) {
     setProduitEnCours(p)
     setForm({
-      designation: p.designation,
-      gamme:       p.gamme,
-      code:        p.code ?? '',
-      st_actuel:   p.st_actuel ?? '',
-      st_min:      p.st_min ?? '',
-      pr_vente:    p.pr_vente ?? '',
+      designation:      p.designation,
+      gamme:            p.gamme,
+      code:             p.code ?? '',
+      st_actuel:        p.st_actuel ?? '',
+      st_min:           p.st_min ?? '',
+      pr_vente:         p.pr_vente ?? '',
+      pr_vente_especes: p.pr_vente_especes ?? '',
     })
     setScannerOuvert(false)
     setOffMessage('')
@@ -199,12 +201,14 @@ export default function Catalogue() {
     setSaving(true)
 
     const payload = {
-      designation: form.designation.trim(),
-      gamme:       form.gamme,
-      code:        form.code.trim() || null,
-      st_actuel:   parseFloat(form.st_actuel) || 0,
-      st_min:      parseFloat(form.st_min) || 0,
-      pr_vente:    parseFloat(form.pr_vente),
+      designation:      form.designation.trim(),
+      gamme:            form.gamme,
+      code:             form.code.trim() || null,
+      st_actuel:        parseFloat(form.st_actuel) || 0,
+      st_min:           parseFloat(form.st_min) || 0,
+      pr_vente:         parseFloat(form.pr_vente),
+      // null (pas 0) si vide → "prix espèces = prix CB" par défaut côté lecture
+      pr_vente_especes: parseFloat(form.pr_vente_especes) || null,
     }
 
     const { error } = produitEnCours
@@ -350,8 +354,8 @@ export default function Catalogue() {
               : 'ok'
 
           const dlcEntry = dlcParProduit[p.id]
-          const dlcBadge = dlcEntry ? (() => {
-            const [yyyy, mm, dd] = dlcEntry.dlc.split('-')
+          const dlcBadge = dlcEntry?.dlc ? (() => {
+            const [yyyy, mm, dd] = dlcEntry.dlc?.split('-') ?? []
             const label = `${dd}/${mm}/${yyyy}`
             const today = new Date(); today.setHours(0, 0, 0, 0)
             const dlcDate = new Date(dlcEntry.dlc); dlcDate.setHours(0, 0, 0, 0)
@@ -540,7 +544,7 @@ export default function Catalogue() {
 
                 <div>
                   <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
-                    Prix de vente (€) <span className="text-pavillon">*</span>
+                    Prix vente CB (€) <span className="text-pavillon">*</span>
                   </label>
                   <input
                     type="number"
@@ -552,6 +556,30 @@ export default function Catalogue() {
                     placeholder="0.00"
                     className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
                   />
+                </div>
+
+                <div>
+                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
+                    Prix espèces (€)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.pr_vente_especes}
+                    onChange={e => setForm(f => ({ ...f, pr_vente_especes: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                  />
+                  <p className="font-mono text-[10px] text-zinc-400 mt-1.5">
+                    Laisser vide si le prix est identique en CB et en espèces.
+                  </p>
+                  {form.pr_vente_especes && form.pr_vente &&
+                   Number(form.pr_vente_especes) >= Number(form.pr_vente) && (
+                    <p className="font-mono text-[10px] text-eiffel mt-1">
+                      ⚠ Le prix espèces est censé être inférieur au prix CB.
+                    </p>
+                  )}
                 </div>
 
               </div>

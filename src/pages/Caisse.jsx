@@ -19,7 +19,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import jsPDF from 'jspdf'
-import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2 } from 'lucide-react'
+import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2, Printer } from 'lucide-react'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -35,8 +35,16 @@ const getMode = () => {
 const getHorloge = () =>
   new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
+// Prix appliqué selon le mode de paiement.
+// pr_vente_especes nullable = pas de tarif espèces différencié → fallback prix CB.
+const prixApplique = (p, mode) =>
+  (mode === 'especes' && p.pr_vente_especes != null)
+    ? p.pr_vente_especes
+    : p.pr_vente
+
 // ── Carte produit (mode browse) — version dark ─────────────────────────────
-function CarteProduit({ p, qte, onChanger, estFavori, onToggleFavori, innerRef }) {
+function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, innerRef }) {
+  const prix = prixApplique(p, mode)
   return (
     <div
       ref={innerRef}
@@ -55,7 +63,11 @@ function CarteProduit({ p, qte, onChanger, estFavori, onToggleFavori, innerRef }
 
       <div className="pr-5">
         <p className="text-sm font-medium text-white truncate">{p.designation}</p>
-        <p className="font-mono text-[10px] text-zinc-500">{p.pr_vente.toFixed(2)} €/u</p>
+        <p className="font-mono text-[10px] text-zinc-500">
+          {p.pr_vente_especes != null
+            ? `${p.pr_vente.toFixed(2)} € CB · ${p.pr_vente_especes.toFixed(2)} € esp`
+            : `${p.pr_vente.toFixed(2)} €/u`}
+        </p>
       </div>
 
       <div className="flex items-center justify-between mt-2">
@@ -78,7 +90,7 @@ function CarteProduit({ p, qte, onChanger, estFavori, onToggleFavori, innerRef }
           </button>
         </div>
         <span className={`text-xs font-semibold tabular ${qte > 0 ? 'text-eiffel' : 'text-white/15'}`}>
-          {(qte * p.pr_vente).toFixed(2)} €
+          {(qte * prix).toFixed(2)} €
         </span>
       </div>
     </div>
@@ -86,13 +98,14 @@ function CarteProduit({ p, qte, onChanger, estFavori, onToggleFavori, innerRef }
 }
 
 // ── Ligne panier (section PANIER en haut) — pleine largeur, plus large que carte
-function LignePanier({ p, qte, onChanger }) {
+function LignePanier({ p, qte, mode, onChanger }) {
+  const prix = prixApplique(p, mode)
   return (
     <div className="bg-bitume-2 rounded-2xl p-3 border border-white/5 flex items-center gap-3">
       <div className="flex-1 min-w-0">
         <p className="font-display font-bold text-sm text-white truncate">{p.designation}</p>
         <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
-          {p.pr_vente.toFixed(2)} €/u · TVA 20%
+          {prix.toFixed(2)} €/u · TVA 20%
         </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -188,7 +201,7 @@ export default function Caisse() {
     async function init() {
       const { data, error } = await supabase
         .from('produits')
-        .select('id, code, designation, gamme, pr_vente, st_actuel')
+        .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel')
         .order('designation')
 
       if (!error) {
@@ -363,8 +376,8 @@ export default function Caisse() {
   )
 
   const totalPanier = useMemo(() =>
-    produits.reduce((sum, p) => sum + (panier[p.id] ?? 0) * p.pr_vente, 0),
-    [produits, panier]
+    produits.reduce((sum, p) => sum + (panier[p.id] ?? 0) * prixApplique(p, modePaiement), 0),
+    [produits, panier, modePaiement]
   )
 
   const caJour = useMemo(() =>
@@ -407,7 +420,7 @@ export default function Caisse() {
       id:           p.id,
       designation:  p.designation,
       quantite:     panier[p.id],
-      prixUnitaire: p.pr_vente,
+      prixUnitaire: prixApplique(p, modePaiement),
     }))
     const total = parseFloat(totalPanier.toFixed(2))
 
@@ -510,6 +523,108 @@ export default function Caisse() {
     doc.save(`recap_caisse_${today}.pdf`)
   }
 
+  // ── PDF ticket imprimante 80mm (style journal Secure Caisse) ──────────────
+  // Imprimante thermique = rouleau continu : calculer la hauteur AVANT de
+  // créer le doc, sinon papier vide éjecté en bout de ticket.
+  function genererRecapTicket() {
+    const eur = (n) => Number(n).toFixed(2).replace('.', ',')
+    const SEP = '-'.repeat(38) // pleine largeur en courier 8 ≈ 38 caractères
+
+    const MARGE_HAUT = 4
+    const MARGE_BAS  = 8
+    const INTERLIGNE = 4
+    // en-tête (~8) + 2 par transaction + 1 par produit + bloc totaux (~8)
+    const nbLignes = 16 + transactions.reduce((n, t) => n + 2 + t.produits.length, 0)
+    const hauteur  = MARGE_HAUT + nbLignes * INTERLIGNE + MARGE_BAS
+
+    const doc = new jsPDF({ unit: 'mm', format: [80, hauteur] })
+    // Bords thermiques rognés : zone utile 4mm → 76mm
+    const LEFT  = 4
+    const RIGHT = 76
+
+    // ── Agrégats ──────────────────────────────────────────────────────────
+    const totalEspeces = transactions.filter(t => t.paiement === 'especes')
+                                     .reduce((s, t) => s + t.total, 0)
+    const totalCB      = transactions.filter(t => t.paiement === 'cb')
+                                     .reduce((s, t) => s + t.total, 0)
+    const totalGeneral = caJour
+    const heures       = transactions.map(t => t.heure)
+    const periodeDebut = heures[0] ?? '--'
+    const periodeFin   = heures[heures.length - 1] ?? '--'
+    const numDoc       = Date.now().toString().slice(-6)
+    const dateFR       = new Date().toLocaleDateString('fr-FR')
+
+    // ── Curseur + helper d'écriture ───────────────────────────────────────
+    let y = MARGE_HAUT
+    const ligne = (txt, align) => {
+      doc.text(txt, align === 'right' ? RIGHT : align === 'center' ? 40 : LEFT, y,
+               align ? { align } : undefined)
+      y += INTERLIGNE
+    }
+
+    // ── En-tête ───────────────────────────────────────────────────────────
+    doc.setFont('courier', 'bold')
+    doc.setFontSize(10)
+    ligne("PANAM'ARKET", 'center')
+    doc.setFont('courier', 'normal')
+    doc.setFontSize(8)
+    ligne(`JOURNAL FINANCIER #${numDoc}`, 'center')
+    ligne(SEP)
+    ligne(`N° Document : ${numDoc}`)
+    ligne(`Opérateur   : PANAM'ARKET`)
+    ligne(`Date        : ${dateFR}`)
+    ligne(`Période     : ${periodeDebut} > ${periodeFin}`)
+    ligne(SEP)
+
+    // ── En-tête colonnes (Opération à gauche, Euro à droite) ─────────────
+    doc.text('Opération', LEFT, y)
+    doc.text('Euro', RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    ligne(SEP)
+
+    // ── Totaux par mode de paiement ──────────────────────────────────────
+    doc.text('Total espèces', LEFT, y)
+    doc.text(eur(totalEspeces), RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    doc.text('Total C.B.', LEFT, y)
+    doc.text(eur(totalCB), RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    ligne(SEP)
+
+    // ── Total général + CA en gras ───────────────────────────────────────
+    doc.setFont('courier', 'bold')
+    doc.text('TOTAL GÉNÉRAL', LEFT, y)
+    doc.text(eur(totalGeneral), RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    doc.text('C.A. TOTAL', LEFT, y)
+    doc.text(eur(totalGeneral), RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    doc.setFont('courier', 'normal')
+    ligne(SEP)
+
+    // ── Nb ventes ─────────────────────────────────────────────────────────
+    doc.text('Nb ventes', LEFT, y)
+    doc.text(String(transactions.length), RIGHT, y, { align: 'right' })
+    y += INTERLIGNE
+    ligne(SEP)
+
+    // ── Détail de chaque vente ───────────────────────────────────────────
+    ligne('< DÉTAIL DES VENTES >')
+    transactions.forEach((t, i) => {
+      ligne(`${t.heure}  Vente #${i + 1}  ${t.paiement === 'cb' ? 'CB' : 'ESP'}`)
+      t.produits.forEach(p => {
+        const lib   = p.designation.slice(0, 22)
+        const total = eur(p.quantite * p.prixUnitaire)
+        doc.text(`${lib}  x${p.quantite}`, LEFT, y)
+        doc.text(total, RIGHT, y, { align: 'right' })
+        y += INTERLIGNE
+      })
+    })
+    ligne(SEP)
+
+    doc.save(`recap_secure_${today}.pdf`)
+  }
+
   // ── Email ──────────────────────────────────────────────────────────────────
   function envoyerEmail() {
     const lignes = transactions.map((t, i) => {
@@ -528,6 +643,7 @@ export default function Caisse() {
       key={p.id}
       p={p}
       qte={panier[p.id] ?? 0}
+      mode={modePaiement}
       onChanger={(delta) => changer(p.id, delta)}
       estFavori={favoris.has(p.id)}
       onToggleFavori={toggleFavori}
@@ -624,6 +740,7 @@ export default function Caisse() {
                   key={p.id}
                   p={p}
                   qte={panier[p.id]}
+                  mode={modePaiement}
                   onChanger={(delta) => changer(p.id, delta)}
                 />
               ))}
@@ -849,6 +966,14 @@ export default function Caisse() {
             </div>
 
             <div className="px-4 pt-3 pb-4 border-t border-white/10 space-y-2 shrink-0">
+              <button
+                onClick={genererRecapTicket}
+                disabled={transactions.length === 0}
+                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-white/10 transition"
+              >
+                <Printer size={18} />
+                Ticket caisse 80mm
+              </button>
               <button
                 onClick={genererPDF}
                 disabled={transactions.length === 0}
