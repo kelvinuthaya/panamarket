@@ -1,0 +1,54 @@
+import { Link } from 'react-router-dom'
+import { Package, ShoppingCart, Wallet, BarChart3 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+
+const ROLE_LABEL = { gerant: 'Gérant', manager: 'Manager' }
+
+const TILES = [
+  { to: '/catalogue', label: 'Catalogue', Icon: Package      },
+  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart },
+  { to: '/caisse',    label: 'Caisse',    Icon: Wallet       },
+  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3, managerOnly: true },
+]
+
+export default function Home() {
+  const { user, role } = useAuth()
+  const estManager = role === 'manager' || role === 'gerant'
+  const roleLabel  = ROLE_LABEL[role] ?? 'Employé'
+  const email      = user?.email ?? ''
+
+  const tiles = TILES.filter(t => !t.managerOnly || estManager)
+
+  return (
+    <div className="py-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="font-display font-bold text-2xl text-bitume leading-tight">
+          Bonjour
+        </h1>
+        <p className="text-sm text-zinc-500 mt-0.5 truncate">{email}</p>
+        <span className="inline-block mt-2 tag-street text-paname-700 bg-paname-700/10 px-2 py-0.5 rounded-full">
+          {roleLabel.toUpperCase()}
+        </span>
+      </div>
+
+      {/* Grille de tuiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {tiles.map(({ to, label, Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="bg-white border border-zinc-200 rounded-2xl p-5 flex flex-col items-center gap-3 hover:border-paname-700/40 hover:shadow-sm transition group"
+          >
+            <Icon
+              size={28}
+              strokeWidth={1.6}
+              className="text-paname-700 group-hover:scale-105 transition-transform"
+            />
+            <span className="text-sm font-medium text-bitume">{label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}

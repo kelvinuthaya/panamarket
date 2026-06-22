@@ -1,43 +1,25 @@
-// PRESERVED: all state, useEffects, functions, useMemo, GAMMES, FORM_VIDE, detecterGamme
-import { useEffect, useRef, useState, useMemo } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Plus, Search, Pencil, Trash2, ScanLine, X, AlertTriangle, Loader2 } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, AlertTriangle, Upload } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import ProduitFormModal from '../components/ProduitFormModal'
+import { GAMMES } from '../lib/produits'
 
-const GAMMES = [
-  'Boissons énergétiques', 'Alcools', 'Confiseries',
-  'Snacks', 'Hygiène', 'Autres',
-]
-
-const FORM_VIDE = {
-  designation: '', gamme: 'Boissons énergétiques',
-  code: '', st_actuel: '', st_min: '', pr_vente: '', pr_vente_especes: '',
-}
-
-function detecterGamme(categoriesTags = []) {
-  const cats = categoriesTags.map(c => c.toLowerCase())
-  if (cats.some(c => c.includes('energy-drink'))) return 'Boissons énergétiques'
-  if (cats.some(c =>
-    c.includes('alcohol') || c.includes('beer') || c.includes('wine') ||
-    c.includes('spirit') || c.includes('liqueur') || c.includes('aperitif')
-  )) return 'Alcools'
-  if (cats.some(c =>
-    c.includes('confection') || c.includes('candy') || c.includes('chocolate') ||
-    c.includes('biscuit') || c.includes('sweet') || c.includes('bonbon')
-  )) return 'Confiseries'
-  if (cats.some(c =>
-    c.includes('snack') || c.includes('chip') || c.includes('crisp') || c.includes('nuts')
-  )) return 'Snacks'
-  if (cats.some(c =>
-    c.includes('hygiene') || c.includes('personal-care') ||
-    c.includes('cosmetic') || c.includes('soap') || c.includes('shampoo')
-  )) return 'Hygiène'
-  return 'Autres'
+// Calcul du badge DLC : couleur + préfixe selon l'urgence (cf. ancien Catalogue)
+function badgeDLC(dlcIso) {
+  if (!dlcIso) return null
+  const [yyyy, mm, dd] = dlcIso.split('-')
+  const label = `${dd}/${mm}/${yyyy}`
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const dlcDate = new Date(dlcIso); dlcDate.setHours(0, 0, 0, 0)
+  const jours = Math.ceil((dlcDate - today) / 86400000)
+  if (jours < 3)  return { label, cls: 'text-pavillon', prefix: '⚠ DLC : ' }
+  if (jours < 14) return { label, cls: 'text-eiffel',   prefix: '🕐 DLC : ' }
+  return              { label, cls: 'text-zinc-400',  prefix: 'DLC : ' }
 }
 
 export default function Catalogue() {
@@ -47,34 +29,24 @@ export default function Catalogue() {
   const [produits, setProduits]           = useState([])
   const [dlcParProduit, setDlcParProduit] = useState({})
   const [loading, setLoading]             = useState(true)
-  const [recherche, setRecherche]         = useState('')
+
+  const [recherche, setRecherche]       = useState('')
+  const [gammeFiltre, setGammeFiltre]   = useState('')   // '' = toutes
+  const [statutFiltre, setStatutFiltre] = useState('tous')
 
   const [modalOuvert, setModalOuvert]       = useState(false)
   const [produitEnCours, setProduitEnCours] = useState(null)
-  const [form, setForm]                     = useState(FORM_VIDE)
-  const [saving, setSaving]                 = useState(false)
 
   const [confirmSupp, setConfirmSupp] = useState(null)
-
-  const [scannerOuvert, setScannerOuvert] = useState(false)
-  const videoRef  = useRef(null)
-  const readerRef = useRef(null)
-
-  const [offLoading, setOffLoading] = useState(false)
-  const [offMessage, setOffMessage] = useState('')
-
-  // filtre statut — new minimal state
-  const [filtre, setFiltre] = useState('tous')
+  const [visible, setVisible]         = useState(20)
 
   useEffect(() => {
     if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
-      navigate('/ruptures', { replace: true })
+      navigate('/', { replace: true })
     }
   }, [role, authLoading, navigate])
 
-  useEffect(() => {
-    fetchProduits()
-  }, [])
+  useEffect(() => { fetchProduits() }, [])
 
   async function fetchProduits() {
     const [{ data, error }, { data: dlcData }] = await Promise.all([
@@ -87,9 +59,10 @@ export default function Catalogue() {
     if (error) console.error('[Catalogue] Supabase :', error.message)
     else setProduits(data)
 
+    // Pour chaque produit : on garde l'entrée DLC la plus proche, en ignorant les entrées sans DLC.
     const map = {}
     dlcData?.forEach(entry => {
-      if (!entry.dlc) return // produit reçu sans DLC : pas de badge à afficher
+      if (!entry.dlc) return
       const existing = map[entry.produit_id]
       if (!existing || entry.dlc < existing.dlc) map[entry.produit_id] = entry
     })
@@ -97,132 +70,9 @@ export default function Catalogue() {
     setLoading(false)
   }
 
-  // Délai 50 ms : attend que React ait monté le <video> dans le DOM avant de
-  // passer la ref à ZXing. Absorbe aussi le double-fire de StrictMode en dev.
-  useEffect(() => {
-    if (!scannerOuvert) return
-
-    let cancelled = false
-
-    const timer = setTimeout(() => {
-      if (cancelled || !videoRef.current) return
-
-      const reader = new BrowserMultiFormatReader()
-      readerRef.current = reader
-
-      reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } } },
-        videoRef.current,
-        (result) => {
-          if (!result || cancelled) return
-          cancelled = true
-          reader.reset()
-          readerRef.current = null
-          setScannerOuvert(false)
-
-          const code = result.getText()
-          setForm(f => ({ ...f, code }))
-          setOffMessage('')
-          chercherSurOFF(code)
-        }
-      ).catch(err => {
-        console.error('[Scan] Caméra inaccessible :', err)
-        if (!cancelled) setScannerOuvert(false)
-      })
-    }, 50)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      if (readerRef.current) {
-        readerRef.current.reset()
-        readerRef.current = null
-      }
-    }
-  }, [scannerOuvert])
-
-  async function chercherSurOFF(code) {
-    setOffLoading(true)
-    setOffMessage('')
-    try {
-      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
-      const data = await res.json()
-      if (data.status === 1) {
-        const p = data.product
-        setForm(f => ({
-          ...f,
-          designation: p.product_name || f.designation,
-          gamme:       detecterGamme(p.categories_tags),
-        }))
-      } else {
-        setOffMessage('Produit non trouvé dans la base Open Food Facts')
-      }
-    } catch {
-      setOffMessage('Erreur lors de la recherche Open Food Facts')
-    } finally {
-      setOffLoading(false)
-    }
-  }
-
-  function fermerModal() {
-    setScannerOuvert(false)
-    setOffMessage('')
-    setModalOuvert(false)
-  }
-
-  function ouvrirAjout() {
-    setProduitEnCours(null)
-    setForm(FORM_VIDE)
-    setScannerOuvert(false)
-    setOffMessage('')
-    setModalOuvert(true)
-    setTimeout(() => { document.getElementById('input-code-ean')?.focus() }, 100)
-  }
-
-  function ouvrirModif(p) {
-    setProduitEnCours(p)
-    setForm({
-      designation:      p.designation,
-      gamme:            p.gamme,
-      code:             p.code ?? '',
-      st_actuel:        p.st_actuel ?? '',
-      st_min:           p.st_min ?? '',
-      pr_vente:         p.pr_vente ?? '',
-      pr_vente_especes: p.pr_vente_especes ?? '',
-    })
-    setScannerOuvert(false)
-    setOffMessage('')
-    setModalOuvert(true)
-    setTimeout(() => { document.getElementById('input-code-ean')?.focus() }, 100)
-  }
-
-  async function sauvegarder(e) {
-    e.preventDefault()
-    setSaving(true)
-
-    const payload = {
-      designation:      form.designation.trim(),
-      gamme:            form.gamme,
-      code:             form.code.trim() || null,
-      st_actuel:        parseFloat(form.st_actuel) || 0,
-      st_min:           parseFloat(form.st_min) || 0,
-      pr_vente:         parseFloat(form.pr_vente),
-      // null (pas 0) si vide → "prix espèces = prix CB" par défaut côté lecture
-      pr_vente_especes: parseFloat(form.pr_vente_especes) || null,
-    }
-
-    const { error } = produitEnCours
-      ? await supabase.from('produits').update(payload).eq('id', produitEnCours.id)
-      : await supabase.from('produits').insert(payload)
-
-    if (error) {
-      console.error('[Catalogue] Sauvegarde :', error.message)
-    } else {
-      await fetchProduits()
-      fermerModal()
-    }
-    setSaving(false)
-  }
+  function fermerModal() { setModalOuvert(false) }
+  function ouvrirAjout()  { setProduitEnCours(null); setModalOuvert(true) }
+  function ouvrirModif(p) { setProduitEnCours(p);    setModalOuvert(true) }
 
   async function supprimer(id) {
     const { error } = await supabase.from('produits').delete().eq('id', id)
@@ -231,26 +81,23 @@ export default function Catalogue() {
     setConfirmSupp(null)
   }
 
-  const produitsFiltres = useMemo(() =>
-    produits.filter(p =>
-      p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
-    ),
-    [produits, recherche]
-  )
-
-  // counts derived from full produits list (unaffected by recherche)
+  // Compteurs basés sur la liste complète (indépendants de la recherche et des filtres)
   const nbRuptures = produits.filter(p => p.st_actuel === 0).length
   const nbFaibles  = produits.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min).length
   const nbOk       = produits.filter(p => p.st_actuel >= p.st_min).length
 
-  // apply status filtre on top of text search
-  const produitsFiltresAvecStatut = useMemo(() => {
-    if (filtre === 'tous') return produitsFiltres
-    if (filtre === 'rupture') return produitsFiltres.filter(p => p.st_actuel === 0)
-    if (filtre === 'faible')  return produitsFiltres.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min)
-    if (filtre === 'ok')      return produitsFiltres.filter(p => p.st_actuel >= p.st_min)
-    return produitsFiltres
-  }, [produitsFiltres, filtre])
+  // Reset de la pagination dès qu'un filtre bouge — sinon "voir plus" peut afficher 0
+  useEffect(() => { setVisible(20) }, [recherche, gammeFiltre, statutFiltre])
+
+  const produitsFiltres = useMemo(() => {
+    return produits.filter(p => {
+      const matchTexte = p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
+      const matchGamme = !gammeFiltre || p.gamme === gammeFiltre
+      const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+      const matchStatut = statutFiltre === 'tous' || statut === statutFiltre
+      return matchTexte && matchGamme && matchStatut
+    })
+  }, [produits, recherche, gammeFiltre, statutFiltre])
 
   if (authLoading || loading) {
     return (
@@ -262,113 +109,230 @@ export default function Catalogue() {
 
   if (!role || (role !== 'manager' && role !== 'gerant')) return null
 
+  // Classes communes pour les pastilles (statut + gamme)
+  const pillBase = 'tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition'
+  const pillInactive = 'bg-white text-zinc-500 border-bitume/10'
+
   return (
     <div className="pb-20">
 
-      {/* ── TOP SECTION ───────────────────────────────────────────────────── */}
-      <div className="px-4 pt-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="tag-street text-zinc-400">CATALOGUE</p>
-            <p className="font-display text-3xl font-bold text-bitume">{produits.length} produits</p>
-          </div>
-          <button
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <p className="font-display text-3xl font-bold text-bitume">Catalogue</p>
+        <div className="flex gap-2 pt-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1.5"
+          >
+            <Upload size={14} />
+            IMPORT
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={ouvrirAjout}
-            className="w-10 h-10 rounded-2xl bg-paname-700 text-white flex items-center justify-center shadow-paname"
+            className="flex items-center gap-1.5"
           >
-            <Plus size={20} />
-          </button>
-        </div>
-
-        {/* ── FILTER PILLS ──────────────────────────────────────────────── */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
-          <button
-            onClick={() => setFiltre('tous')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'tous'
-                ? 'bg-bitume text-white border-bitume'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            TOUS
-          </button>
-          <button
-            onClick={() => setFiltre('rupture')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'rupture'
-                ? 'bg-pavillon text-white border-pavillon shadow-rouge'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            RUPTURES {nbRuptures > 0 && `· ${nbRuptures}`}
-          </button>
-          <button
-            onClick={() => setFiltre('faible')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'faible'
-                ? 'bg-eiffel text-yellow-950 border-eiffel shadow-or'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            INSUFF. {nbFaibles > 0 && `· ${nbFaibles}`}
-          </button>
-          <button
-            onClick={() => setFiltre('ok')}
-            className={`tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition ${
-              filtre === 'ok'
-                ? 'bg-signal text-white border-signal'
-                : 'bg-white text-zinc-500 border-bitume/10'
-            }`}
-          >
-            EN STOCK {nbOk > 0 && `· ${nbOk}`}
-          </button>
-        </div>
-
-        {/* ── SEARCH BAR ────────────────────────────────────────────────── */}
-        <div className="relative mb-4">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Rechercher un produit…"
-            value={recherche}
-            onChange={e => setRecherche(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-white border border-bitume/10 rounded-2xl text-sm outline-none focus:border-paname-700 transition-colors"
-          />
+            <Plus size={14} />
+            NOUVEAU
+          </Button>
         </div>
       </div>
 
-      {/* ── LISTE ─────────────────────────────────────────────────────────── */}
-      <div className="px-4 space-y-2">
-        {produitsFiltresAvecStatut.length === 0 && (
+      {/* ── BARRE DE RECHERCHE ─────────────────────────────────────────────── */}
+      <div className="relative mb-3">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+        <input
+          type="text"
+          placeholder="Rechercher un produit…"
+          value={recherche}
+          onChange={e => setRecherche(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 bg-white border border-bitume/10 rounded-2xl text-sm outline-none focus:border-paname-700 transition-colors"
+        />
+      </div>
+
+      {/* ── PASTILLES STATUT (ligne 1) ─────────────────────────────────────── */}
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-2 scrollbar-hide">
+        <button
+          onClick={() => setStatutFiltre('tous')}
+          className={`${pillBase} ${
+            statutFiltre === 'tous' ? 'bg-bitume text-white border-bitume' : pillInactive
+          }`}
+        >
+          TOUS
+        </button>
+        <button
+          onClick={() => setStatutFiltre('rupture')}
+          className={`${pillBase} ${
+            statutFiltre === 'rupture' ? 'bg-pavillon text-white border-pavillon shadow-rouge' : pillInactive
+          }`}
+        >
+          RUPTURES {nbRuptures > 0 && `· ${nbRuptures}`}
+        </button>
+        <button
+          onClick={() => setStatutFiltre('faible')}
+          className={`${pillBase} ${
+            statutFiltre === 'faible' ? 'bg-eiffel text-yellow-950 border-eiffel shadow-or' : pillInactive
+          }`}
+        >
+          INSUFF. {nbFaibles > 0 && `· ${nbFaibles}`}
+        </button>
+        <button
+          onClick={() => setStatutFiltre('ok')}
+          className={`${pillBase} ${
+            statutFiltre === 'ok' ? 'bg-signal text-white border-signal' : pillInactive
+          }`}
+        >
+          EN STOCK {nbOk > 0 && `· ${nbOk}`}
+        </button>
+      </div>
+
+      {/* ── PASTILLES GAMME (ligne 2) ──────────────────────────────────────── */}
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+        <button
+          onClick={() => setGammeFiltre('')}
+          className={`${pillBase} ${
+            gammeFiltre === '' ? 'bg-bitume text-white border-bitume' : pillInactive
+          }`}
+        >
+          TOUTES
+        </button>
+        {GAMMES.map(g => (
+          <button
+            key={g}
+            onClick={() => setGammeFiltre(g)}
+            className={`${pillBase} ${
+              gammeFiltre === g ? 'bg-bitume text-white border-bitume' : pillInactive
+            }`}
+          >
+            {g}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TOTAL ──────────────────────────────────────────────────────────── */}
+      <p className="font-mono text-[11px] text-zinc-400 mb-4">
+        {produits.length} produits
+      </p>
+
+      {/* ── TABLE DESKTOP (md+) ────────────────────────────────────────────── */}
+      <div className="hidden md:block">
+        <div className="bg-white rounded-2xl border border-bitume/5 overflow-x-auto">
+          <table className="w-full min-w-[760px]">
+            <thead>
+              <tr className="bg-calcaire border-b border-bitume/5">
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Produit</th>
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Code-barres</th>
+                <th className="tag-street text-zinc-500 text-left px-4 py-3 font-normal">Gamme</th>
+                <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Stock</th>
+                <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Prix</th>
+                <th className="tag-street text-zinc-500 text-center px-4 py-3 font-normal">Statut</th>
+                <th className="px-4 py-3 w-20" />
+              </tr>
+            </thead>
+            <tbody>
+              {produitsFiltres.length === 0 && (
+                <tr>
+                  <td colSpan="7" className="px-4 py-16 text-center">
+                    <p className="text-3xl mb-2">📦</p>
+                    <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT</p>
+                    <p className="font-mono text-[10px] text-zinc-400">
+                      Modifie les filtres ou ajoute un produit
+                    </p>
+                  </td>
+                </tr>
+              )}
+              {produitsFiltres.slice(0, visible).map(p => {
+                const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+                const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
+                const dlc = badgeDLC(dlcParProduit[p.id]?.dlc)
+                return (
+                  <tr key={p.id} className="border-t border-zinc-100 hover:bg-zinc-50 transition-colors">
+                    <td className="px-4 py-3 max-w-[220px]">
+                      <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
+                      {dlc && (
+                        <p className={`font-mono text-[10px] mt-0.5 ${dlc.cls}`}>
+                          {dlc.prefix}{dlc.label}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-400 max-w-[140px] truncate">
+                      {p.code ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">
+                      {p.gamme}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <span className={`font-mono tabular font-bold text-sm ${stockColor}`}>
+                        {p.st_actuel}
+                      </span>
+                      <span className="font-mono text-[10px] text-zinc-400">/{p.st_min}</span>
+                    </td>
+                    <td className="px-4 py-3 font-mono tabular text-sm font-semibold text-bitume text-right whitespace-nowrap">
+                      {p.pr_vente?.toFixed(2)} €
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Badge variant={statut}>
+                        {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => ouvrirModif(p)}
+                          aria-label="Modifier"
+                          className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmSupp(p)}
+                          aria-label="Supprimer"
+                          className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {visible < produitsFiltres.length && (
+          <button
+            onClick={() => setVisible(v => v + 20)}
+            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+          >
+            VOIR PLUS · {produitsFiltres.length - visible} restants
+          </button>
+        )}
+      </div>
+
+      {/* ── CARDS MOBILE (<md) ─────────────────────────────────────────────── */}
+      <div className="md:hidden space-y-2">
+        {produitsFiltres.length === 0 && (
           <div className="text-center py-16">
-            <p className="tag-street text-zinc-400 mb-2">AUCUN PRODUIT</p>
-            <p className="text-sm text-zinc-400">Modifie les filtres ou ajoute un produit</p>
+            <p className="text-3xl mb-2">📦</p>
+            <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT</p>
+            <p className="font-mono text-[10px] text-zinc-400">
+              Modifie les filtres ou ajoute un produit
+            </p>
           </div>
         )}
-
-        {produitsFiltresAvecStatut.map(p => {
-          const statut = p.st_actuel === 0
-            ? 'rupture'
-            : p.st_actuel < p.st_min
-              ? 'faible'
-              : 'ok'
-
-          const dlcEntry = dlcParProduit[p.id]
-          const dlcBadge = dlcEntry?.dlc ? (() => {
-            const [yyyy, mm, dd] = dlcEntry.dlc?.split('-') ?? []
-            const label = `${dd}/${mm}/${yyyy}`
-            const today = new Date(); today.setHours(0, 0, 0, 0)
-            const dlcDate = new Date(dlcEntry.dlc); dlcDate.setHours(0, 0, 0, 0)
-            const jours = Math.ceil((dlcDate - today) / 86400000)
-            if (jours < 3)  return { label, cls: 'text-pavillon', prefix: '⚠ DLC : ' }
-            if (jours < 14) return { label, cls: 'text-eiffel',   prefix: '🕐 DLC : ' }
-            return              { label, cls: 'text-zinc-400',  prefix: 'DLC : ' }
-          })() : null
-
+        {produitsFiltres.slice(0, visible).map(p => {
+          const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+          const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
+          const dlc = badgeDLC(dlcParProduit[p.id]?.dlc)
           return (
             <Card key={p.id} variant={statut === 'ok' ? 'default' : statut}>
               <div className="flex items-start justify-between gap-2 mb-1">
-                <p className="font-display font-bold text-sm text-bitume truncate flex-1">{p.designation}</p>
+                <p className="font-display font-bold text-sm text-bitume truncate flex-1">
+                  {p.designation}
+                </p>
                 <Badge variant={statut}>
                   {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
                 </Badge>
@@ -377,22 +341,22 @@ export default function Catalogue() {
               <p className="font-mono text-[10px] text-zinc-400 mb-2">
                 {p.gamme}
                 {p.code && ` · ${p.code}`}
-                {dlcBadge && (
-                  <span className={dlcBadge.cls}>{` · ${dlcBadge.prefix}${dlcBadge.label}`}</span>
+                {dlc && (
+                  <span className={dlc.cls}>{` · ${dlc.prefix}${dlc.label}`}</span>
                 )}
               </p>
 
               <div className="flex items-end justify-between">
                 <div>
-                  <span className={`font-display tabular text-3xl font-bold ${
-                    statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
-                  }`}>
+                  <span className={`font-display tabular text-3xl font-bold ${stockColor}`}>
                     {p.st_actuel}
                   </span>
                   <span className="font-mono text-zinc-400 text-xs">/{p.st_min} min</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-display tabular text-xl font-bold text-bitume">{p.pr_vente?.toFixed(2)} €</span>
+                  <span className="font-display tabular text-xl font-bold text-bitume">
+                    {p.pr_vente?.toFixed(2)} €
+                  </span>
                   <button
                     onClick={() => ouvrirModif(p)}
                     aria-label="Modifier"
@@ -412,203 +376,27 @@ export default function Catalogue() {
             </Card>
           )
         })}
+        {visible < produitsFiltres.length && (
+          <button
+            onClick={() => setVisible(v => v + 20)}
+            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+          >
+            VOIR PLUS · {produitsFiltres.length - visible} restants
+          </button>
+        )}
       </div>
 
-      {/* ── MODAL AJOUT / MODIFICATION ────────────────────────────────────── */}
-      {modalOuvert && createPortal(
-        <div
-          className="fixed inset-0 z-[55] bg-black/50 flex items-end sm:items-center sm:justify-center"
-          onClick={e => { if (e.target === e.currentTarget) fermerModal() }}
-        >
-          <div className="bg-white w-full max-h-[92vh] rounded-t-3xl sm:rounded-3xl sm:max-w-md flex flex-col border-t-2 border-paname-700 sm:border-t-0">
+      {/* ── MODAL AJOUT / MODIFICATION ─────────────────────────────────────── */}
+      {modalOuvert && (
+        <ProduitFormModal
+          produit={produitEnCours}
+          onClose={fermerModal}
+          onSaved={fetchProduits}
+        />
+      )}
 
-            <div className="flex items-center justify-between px-4 py-4 border-b border-bitume/5 shrink-0">
-              <h2 className="font-display font-bold text-lg text-bitume">
-                {produitEnCours ? 'Modifier le produit' : 'Ajouter un produit'}
-              </h2>
-              <button onClick={fermerModal} className="p-2 rounded-xl bg-bitume/5 text-bitume">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={sauvegarder} className="flex-1 flex flex-col overflow-hidden">
-
-              <div className="overflow-y-auto flex-1 px-4 py-4 space-y-5">
-
-                <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
-                    Désignation <span className="text-pavillon">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={form.designation}
-                    onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
-                    placeholder="Ex : Red Bull 250ml"
-                    className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Gamme</label>
-                  <select
-                    value={form.gamme}
-                    onChange={e => setForm(f => ({ ...f, gamme: e.target.value }))}
-                    className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                  >
-                    {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
-                    Code EAN (optionnel)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="input-code-ean"
-                      type="text"
-                      value={form.code}
-                      onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          if (form.code.trim()) chercherSurOFF(form.code.trim())
-                        }
-                      }}
-                      placeholder="Ex : 9002490100070"
-                      className="flex-1 bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setScannerOuvert(o => !o)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium shrink-0 transition-colors ${
-                        scannerOuvert
-                          ? 'bg-zinc-100 text-zinc-600'
-                          : 'bg-paname-700/10 border border-paname-700/20 text-paname-700'
-                      }`}
-                    >
-                      <ScanLine size={16} />
-                      {scannerOuvert ? 'Fermer' : 'Scanner'}
-                    </button>
-                  </div>
-
-                  {/* playsInline obligatoire sur iOS Safari pour éviter le plein-écran */}
-                  {scannerOuvert && (
-                    <div className="mt-2 rounded-2xl overflow-hidden border border-paname-700/30 bg-black">
-                      <video ref={videoRef} className="w-full" playsInline muted />
-                      <p className="text-center text-xs text-zinc-400 py-2 bg-white border-t border-bitume/5">
-                        Pointez la caméra vers le code-barres
-                      </p>
-                    </div>
-                  )}
-
-                  {offLoading && (
-                    <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
-                      <Loader2 size={14} className="animate-spin text-paname-700" />
-                      Recherche Open Food Facts…
-                    </div>
-                  )}
-
-                  {offMessage && (
-                    <p className="text-eiffel text-xs mt-1">{offMessage}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Stock actuel</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={form.st_actuel}
-                      onChange={e => setForm(f => ({ ...f, st_actuel: e.target.value }))}
-                      placeholder="0"
-                      className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">Stock minimum</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={form.st_min}
-                      onChange={e => setForm(f => ({ ...f, st_min: e.target.value }))}
-                      placeholder="0"
-                      className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
-                    Prix vente CB (€) <span className="text-pavillon">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={form.pr_vente}
-                    onChange={e => setForm(f => ({ ...f, pr_vente: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider mb-1.5 block">
-                    Prix espèces (€)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.pr_vente_especes}
-                    onChange={e => setForm(f => ({ ...f, pr_vente_especes: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
-                  />
-                  <p className="font-mono text-[10px] text-zinc-400 mt-1.5">
-                    Laisser vide si le prix est identique en CB et en espèces.
-                  </p>
-                  {form.pr_vente_especes && form.pr_vente &&
-                   Number(form.pr_vente_especes) >= Number(form.pr_vente) && (
-                    <p className="font-mono text-[10px] text-eiffel mt-1">
-                      ⚠ Le prix espèces est censé être inférieur au prix CB.
-                    </p>
-                  )}
-                </div>
-
-              </div>
-
-              {/* pb-16 = hauteur bottom nav mobile, sm:pb-5 sur desktop */}
-              <div className="flex gap-3 px-4 pt-3 pb-16 sm:pb-5 border-t border-bitume/5 shrink-0">
-                <button
-                  type="button"
-                  onClick={fermerModal}
-                  className="flex-1 py-3 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-paname-700 text-white text-sm font-semibold shadow-paname disabled:opacity-50"
-                >
-                  {saving ? 'Sauvegarde…' : produitEnCours ? 'Enregistrer' : 'Ajouter'}
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      , document.body)}
-
-      {/* ── DIALOG CONFIRMATION SUPPRESSION ───────────────────────────────── */}
-      {confirmSupp && createPortal(
+      {/* ── DIALOG CONFIRMATION SUPPRESSION ────────────────────────────────── */}
+      {confirmSupp && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-6">
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 border border-bitume/10">
             <div className="flex items-center gap-3 mb-3">
@@ -637,7 +425,7 @@ export default function Catalogue() {
             </div>
           </div>
         </div>
-      , document.body)}
+      )}
 
     </div>
   )

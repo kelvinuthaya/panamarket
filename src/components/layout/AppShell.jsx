@@ -14,14 +14,11 @@ import { BottomNav } from './BottomNav'
 import { Drawer } from './Drawer'
 
 const ROUTE_TITLES = {
+  '/':                  'Accueil',
   '/catalogue':         'Catalogue',
   '/achats':            'Achats',
   '/caisse':            'Caisse',
   '/dashboard':         'Dashboard',
-  '/ruptures':          'Ruptures',
-  '/gestion':           'Gestion',
-  '/import-caisse':     'Import caisse',
-  '/utilisateurs':      'Utilisateurs',
   '/approvisionnement': 'Approvisionnement',
   '/livraison':         'Livraison',
 }
@@ -41,10 +38,12 @@ export const AppShell = ({ children, title: titleOverride }) => {
 
       {/* Contenu — décalé de 240px sur desktop pour ne pas passer sous la sidebar */}
       <main
-        className="md:ml-60 px-4 pt-4 md:pt-6 page-fade"
+        className="md:ml-60 page-fade"
         style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}
       >
-        {children}
+        <div className="max-w-5xl mx-auto px-4 pt-4 md:pt-6">
+          {children}
+        </div>
       </main>
 
       {/* Mobile : nav fixe en bas */}

@@ -20,6 +20,7 @@ import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import jsPDF from 'jspdf'
 import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2, Printer } from 'lucide-react'
+import ProduitFormModal from '../components/ProduitFormModal'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -45,6 +46,8 @@ const prixApplique = (p, mode) =>
 // ── Carte produit (mode browse) — version dark ─────────────────────────────
 function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, innerRef }) {
   const prix = prixApplique(p, mode)
+  const statut     = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+  const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
   return (
     <div
       ref={innerRef}
@@ -67,6 +70,9 @@ function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, inne
           {p.pr_vente_especes != null
             ? `${p.pr_vente.toFixed(2)} € CB · ${p.pr_vente_especes.toFixed(2)} € esp`
             : `${p.pr_vente.toFixed(2)} €/u`}
+        </p>
+        <p className={`font-mono text-[10px] mt-0.5 ${stockColor}`}>
+          Stock : {p.st_actuel}
         </p>
       </div>
 
@@ -175,6 +181,8 @@ export default function Caisse() {
   const [showConfirmVider, setShowConfirmVider]       = useState(false)
   const [showConfirmCloturer, setShowConfirmCloturer] = useState(false)
   const [toast, setToast] = useState('')
+  const [codeInconnu, setCodeInconnu]         = useState(null)
+  const [modalAjoutOuvert, setModalAjoutOuvert] = useState(false)
 
   // Horloge — décorative uniquement (étape 4 PANAME OS)
   const [horloge, setHorloge] = useState(getHorloge)
@@ -201,7 +209,7 @@ export default function Caisse() {
     async function init() {
       const { data, error } = await supabase
         .from('produits')
-        .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel')
+        .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel, st_min')
         .order('designation')
 
       if (!error) {
@@ -297,7 +305,7 @@ export default function Caisse() {
               produitRefs.current[produit.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
             }, 80)
           } else {
-            setToast('Produit non reconnu')
+            setCodeInconnu(code)
           }
         }
       ).catch(err => {
@@ -333,7 +341,7 @@ export default function Caisse() {
           if (produit) {
             setPanier(prev => ({ ...prev, [produit.id]: (prev[produit.id] ?? 0) + 1 }))
           } else {
-            setToast('Produit non reconnu')
+            setCodeInconnu(buffer)
           }
         }
         buffer  = ''
@@ -464,6 +472,22 @@ export default function Caisse() {
   async function supprimerTransaction(id) {
     await supabase.from('transactions').delete().eq('id', id)
     setTransactions(prev => prev.filter(t => t.id !== id))
+  }
+
+  async function onProduitAjoute() {
+    const { data, error } = await supabase
+      .from('produits')
+      .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel, st_min')
+      .order('designation')
+    if (error) return
+    setProduits(data)
+    const nouveau = data.find(p => p.code === codeInconnu)
+    if (nouveau) {
+      setPanier(prev => ({ ...prev, [nouveau.id]: (prev[nouveau.id] ?? 0) + 1 }))
+      setToast('Produit créé et ajouté au panier ✓')
+    }
+    setModalAjoutOuvert(false)
+    setCodeInconnu(null)
   }
 
   function viderPanier() {
@@ -999,6 +1023,51 @@ export default function Caisse() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── PRODUIT INCONNU — dialog de proposition ──────────────────────────── */}
+      {codeInconnu && !modalAjoutOuvert && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
+          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-eiffel/20 flex items-center justify-center shrink-0">
+                <ScanLine size={20} className="text-eiffel" />
+              </div>
+              <h2 className="font-display font-bold text-base text-white">Produit inconnu</h2>
+            </div>
+            <p className="text-sm text-zinc-400 mb-1">
+              Code scanné :
+            </p>
+            <p className="font-mono text-sm text-eiffel mb-6">{codeInconnu}</p>
+            <p className="text-sm text-zinc-400 mb-6">
+              Ce code-barres ne correspond à aucun produit du catalogue.
+              Voulez-vous l'ajouter maintenant ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCodeInconnu(null)}
+                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
+              >
+                Ignorer
+              </button>
+              <button
+                onClick={() => setModalAjoutOuvert(true)}
+                className="flex-1 py-3 rounded-xl bg-eiffel text-yellow-950 text-sm font-semibold shadow-or"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL AJOUT PRODUIT (depuis scan inconnu) ────────────────────────── */}
+      {modalAjoutOuvert && (
+        <ProduitFormModal
+          produit={{ code: codeInconnu }}
+          onClose={() => { setModalAjoutOuvert(false); setCodeInconnu(null) }}
+          onSaved={onProduitAjoute}
+        />
       )}
 
       {/* ── CONFIRM : VIDER LE PANIER ─────────────────────────────────────────── */}
