@@ -8,25 +8,29 @@ const TILES = [
   { to: '/catalogue', label: 'Catalogue', Icon: Package      },
   { to: '/achats',    label: 'Achats',    Icon: ShoppingCart },
   { to: '/caisse',    label: 'Caisse',    Icon: Wallet       },
-  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3, managerOnly: true },
+  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3, gerantOnly: true },
 ]
 
 export default function Home() {
   const { user, role } = useAuth()
   const estManager = role === 'manager' || role === 'gerant'
+  const estGerant  = role === 'gerant'
   const roleLabel  = ROLE_LABEL[role] ?? 'Employé'
-  const email      = user?.email ?? ''
+  const nom        = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Utilisateur'
 
-  const tiles = TILES.filter(t => !t.managerOnly || estManager)
+  const tiles = TILES.filter(t => {
+    if (t.gerantOnly)  return estGerant
+    if (t.managerOnly) return estManager
+    return true
+  })
 
   return (
     <div className="py-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="font-display font-bold text-2xl text-bitume leading-tight">
-          Bonjour
+          Bonjour {nom}
         </h1>
-        <p className="text-sm text-zinc-500 mt-0.5 truncate">{email}</p>
         <span className="inline-block mt-2 tag-street text-paname-700 bg-paname-700/10 px-2 py-0.5 rounded-full">
           {roleLabel.toUpperCase()}
         </span>

@@ -40,7 +40,12 @@ const SidebarLink = ({ to, Icon, children }) => (
 
 export const Sidebar = () => {
   const { user, role, logout } = useAuth()
+  // estManager : peut éditer le catalogue. estGerant : accès Dashboard + suppressions.
   const estManager = role === 'manager' || role === 'gerant'
+  const estGerant  = role === 'gerant'
+  // Libellé + couleur selon le rôle réel (3 niveaux)
+  const roleLabel = role === 'gerant' ? 'GÉRANT' : role === 'manager' ? 'MANAGER' : 'EMPLOYÉ'
+  const roleColor = role === 'gerant' ? 'text-eiffel' : role === 'manager' ? 'text-paname-300' : 'text-white/50'
   // Initiales depuis l'email — fallback "U" si pas connecté
   const initiales = (user?.email ?? 'U').slice(0, 2).toUpperCase()
 
@@ -55,7 +60,7 @@ export const Sidebar = () => {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
         {PRIMARY_LINKS
-          .filter(({ to }) => to !== '/dashboard' || estManager)
+          .filter(({ to }) => to !== '/dashboard' || estGerant)
           .map(({ to, label, Icon }) => (
             <SidebarLink key={to} to={to} Icon={Icon}>
               {label}
@@ -73,8 +78,8 @@ export const Sidebar = () => {
           <div className="text-sm font-medium text-white truncate">
             {user?.email ?? 'Anonyme'}
           </div>
-          <div className={`tag-street ${estManager ? 'text-eiffel' : 'text-white/50'}`}>
-            {estManager ? 'GÉRANT' : 'EMPLOYÉ'}
+          <div className={`tag-street ${roleColor}`}>
+            {roleLabel}
           </div>
         </div>
         <button

@@ -52,7 +52,7 @@ export default function Dashboard() {
   const csvRef = useRef(null)
 
   useEffect(() => {
-    if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
+    if (!authLoading && role && role !== 'gerant') {
       navigate('/catalogue', { replace: true })
     }
   }, [role, authLoading, navigate])
@@ -317,7 +317,7 @@ export default function Dashboard() {
     )
   }
 
-  const peutImporter = role === 'manager' || role === 'gerant'
+  const peutImporter = role === 'gerant'
 
   // Labels des mois prev/next pour le sélecteur
   const [yr, mo] = moisSelectionne.split('-').map(Number)

@@ -40,11 +40,10 @@ export default function Catalogue() {
   const [confirmSupp, setConfirmSupp] = useState(null)
   const [visible, setVisible]         = useState(20)
 
-  useEffect(() => {
-    if (!authLoading && role && role !== 'manager' && role !== 'gerant') {
-      navigate('/', { replace: true })
-    }
-  }, [role, authLoading, navigate])
+  // 3 niveaux de rôle : employé voit en lecture seule, manager peut éditer,
+  // seul le gérant accède à l'import (qui mène au Dashboard, gérant-only)
+  const peutModifier = role === 'manager' || role === 'gerant'
+  const peutImporter = role === 'gerant'
 
   useEffect(() => { fetchProduits() }, [])
 
@@ -107,8 +106,6 @@ export default function Catalogue() {
     )
   }
 
-  if (!role || (role !== 'manager' && role !== 'gerant')) return null
-
   // Classes communes pour les pastilles (statut + gamme)
   const pillBase = 'tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition'
   const pillInactive = 'bg-white text-zinc-500 border-bitume/10'
@@ -120,24 +117,28 @@ export default function Catalogue() {
       <div className="flex items-start justify-between gap-3 mb-5">
         <p className="font-display text-3xl font-bold text-bitume">Catalogue</p>
         <div className="flex gap-2 pt-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-1.5"
-          >
-            <Upload size={14} />
-            IMPORT
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={ouvrirAjout}
-            className="flex items-center gap-1.5"
-          >
-            <Plus size={14} />
-            NOUVEAU
-          </Button>
+          {peutImporter && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-1.5"
+            >
+              <Upload size={14} />
+              IMPORT
+            </Button>
+          )}
+          {peutModifier && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={ouvrirAjout}
+              className="flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              NOUVEAU
+            </Button>
+          )}
         </div>
       </div>
 
@@ -229,13 +230,13 @@ export default function Catalogue() {
                 <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Stock</th>
                 <th className="tag-street text-zinc-500 text-right px-4 py-3 font-normal">Prix</th>
                 <th className="tag-street text-zinc-500 text-center px-4 py-3 font-normal">Statut</th>
-                <th className="px-4 py-3 w-20" />
+                {peutModifier && <th className="px-4 py-3 w-20" />}
               </tr>
             </thead>
             <tbody>
               {produitsFiltres.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="px-4 py-16 text-center">
+                  <td colSpan={peutModifier ? 7 : 6} className="px-4 py-16 text-center">
                     <p className="text-3xl mb-2">📦</p>
                     <p className="tag-street text-zinc-400 mb-1">AUCUN PRODUIT</p>
                     <p className="font-mono text-[10px] text-zinc-400">
@@ -278,24 +279,26 @@ export default function Catalogue() {
                         {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button
-                          onClick={() => ouvrirModif(p)}
-                          aria-label="Modifier"
-                          className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => setConfirmSupp(p)}
-                          aria-label="Supprimer"
-                          className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
+                    {peutModifier && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button
+                            onClick={() => ouvrirModif(p)}
+                            aria-label="Modifier"
+                            className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => setConfirmSupp(p)}
+                            aria-label="Supprimer"
+                            className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -357,20 +360,24 @@ export default function Catalogue() {
                   <span className="font-display tabular text-xl font-bold text-bitume">
                     {p.pr_vente?.toFixed(2)} €
                   </span>
-                  <button
-                    onClick={() => ouvrirModif(p)}
-                    aria-label="Modifier"
-                    className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
-                  >
-                    <Pencil size={15} />
-                  </button>
-                  <button
-                    onClick={() => setConfirmSupp(p)}
-                    aria-label="Supprimer"
-                    className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {peutModifier && (
+                    <>
+                      <button
+                        onClick={() => ouvrirModif(p)}
+                        aria-label="Modifier"
+                        className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => setConfirmSupp(p)}
+                        aria-label="Supprimer"
+                        className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </Card>

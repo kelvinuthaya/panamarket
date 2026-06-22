@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase'
 import jsPDF from 'jspdf'
 import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2, Printer } from 'lucide-react'
 import ProduitFormModal from '../components/ProduitFormModal'
+import { useAuth } from '../contexts/AuthContext'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -169,6 +170,7 @@ function SectionCategorie({ titre, variant = 'default', produits, ouverte, onTog
 }
 
 export default function Caisse() {
+  const { role } = useAuth()
   const [produits, setProduits]         = useState([])
   const [panier, setPanier]             = useState({})
   const [transactions, setTransactions] = useState([])
@@ -957,13 +959,15 @@ export default function Caisse() {
                           <span className="font-display tabular text-base font-bold text-white">
                             {t.total.toFixed(2)} €
                           </span>
-                          <button
-                            onClick={() => supprimerTransaction(t.id)}
-                            className="p-1.5 rounded-lg bg-pavillon/20 text-pavillon hover:bg-pavillon/30"
-                            aria-label="Supprimer cette transaction"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {role === 'gerant' && (
+                            <button
+                              onClick={() => supprimerTransaction(t.id)}
+                              className="p-1.5 rounded-lg bg-pavillon/20 text-pavillon hover:bg-pavillon/30"
+                              aria-label="Supprimer cette transaction"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       {t.produits.map((p, j) => (

@@ -8,17 +8,22 @@ import { Home, Package, ShoppingCart, Wallet, BarChart3 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const BASE_TABS = [
-  { to: '/',          label: 'Accueil',   Icon: Home,         managerOnly: false },
-  { to: '/catalogue', label: 'Catalogue', Icon: Package,      managerOnly: false },
-  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart, managerOnly: false },
-  { to: '/caisse',    label: 'Caisse',    Icon: Wallet,       managerOnly: false },
-  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3,    managerOnly: true  },
+  { to: '/',          label: 'Accueil',   Icon: Home         },
+  { to: '/catalogue', label: 'Catalogue', Icon: Package      },
+  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart },
+  { to: '/caisse',    label: 'Caisse',    Icon: Wallet       },
+  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3,   gerantOnly: true },
 ]
 
 export const BottomNav = () => {
   const { role } = useAuth()
   const estManager = role === 'manager' || role === 'gerant'
-  const tabs = BASE_TABS.filter(t => !t.managerOnly || estManager)
+  const estGerant  = role === 'gerant'
+  const tabs = BASE_TABS.filter(t => {
+    if (t.gerantOnly)  return estGerant
+    if (t.managerOnly) return estManager
+    return true
+  })
 
   return (
     <nav
