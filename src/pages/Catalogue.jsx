@@ -40,6 +40,7 @@ export default function Catalogue() {
 
   const [confirmSupp, setConfirmSupp] = useState(null)
   const [visible, setVisible]         = useState(20)
+  const [tri, setTri]                 = useState('alpha') // 'alpha' | 'date_asc' | 'date_desc'
 
   // 3 niveaux de rôle : employé voit en lecture seule, manager peut éditer,
   // seul le gérant accède à l'import (qui mène au Dashboard, gérant-only)
@@ -52,8 +53,7 @@ export default function Catalogue() {
     const [{ data, error }, { data: dlcData }] = await Promise.all([
       supabase
         .from('produits')
-        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente, pr_vente_especes')
-        .order('designation'),
+        .select('id, code, designation, gamme, st_actuel, st_min, pr_vente, pr_vente_especes'),
       supabase.from('stock_dlc').select('*'),
     ])
     if (error) console.error('[Catalogue] Supabase :', error.message)
@@ -91,18 +91,21 @@ export default function Catalogue() {
   const nbFaibles  = produits.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min).length
   const nbOk       = produits.filter(p => p.st_actuel >= p.st_min).length
 
-  // Reset de la pagination dès qu'un filtre bouge — sinon "voir plus" peut afficher 0
-  useEffect(() => { setVisible(20) }, [recherche, gammeFiltre, statutFiltre])
+  // Reset de la pagination dès qu'un filtre ou le tri bouge
+  useEffect(() => { setVisible(20) }, [recherche, gammeFiltre, statutFiltre, tri])
 
   const produitsFiltres = useMemo(() => {
-    return produits.filter(p => {
+    const filtres = produits.filter(p => {
       const matchTexte = p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
       const matchGamme = !gammeFiltre || p.gamme === gammeFiltre
       const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
       const matchStatut = statutFiltre === 'tous' || statut === statutFiltre
       return matchTexte && matchGamme && matchStatut
     })
-  }, [produits, recherche, gammeFiltre, statutFiltre])
+    if (tri === 'date_asc')  return filtres.sort((a, b) => a.id - b.id)
+    if (tri === 'date_desc') return filtres.sort((a, b) => b.id - a.id)
+    return filtres.sort((a, b) => a.designation.localeCompare(b.designation, 'fr'))
+  }, [produits, recherche, gammeFiltre, statutFiltre, tri])
 
   if (authLoading || loading) {
     return (
@@ -206,23 +209,35 @@ export default function Catalogue() {
         >
           TOUTES
         </button>
-        {GAMMES.map(g => (
-          <button
-            key={g}
-            onClick={() => setGammeFiltre(g)}
-            className={`${pillBase} ${
-              gammeFiltre === g ? 'bg-bitume text-white border-bitume' : pillInactive
-            }`}
-          >
-            {g}
-          </button>
-        ))}
+        {GAMMES.map(g => {
+          const nb = produits.filter(p => p.gamme === g).length
+          return (
+            <button
+              key={g}
+              onClick={() => setGammeFiltre(g)}
+              className={`${pillBase} ${
+                gammeFiltre === g ? 'bg-bitume text-white border-bitume' : pillInactive
+              }`}
+            >
+              {g}{gammeFiltre === g && nb > 0 && ` · ${nb}`}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── TOTAL ──────────────────────────────────────────────────────────── */}
-      <p className="font-mono text-[11px] text-zinc-400 mb-4">
-        {produits.length} produits
-      </p>
+      {/* ── TRI + TOTAL ────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="font-mono text-[11px] text-zinc-400">{produits.length} produits</p>
+        <select
+          value={tri}
+          onChange={e => setTri(e.target.value)}
+          className="font-mono text-[11px] text-zinc-500 bg-white border border-bitume/10 rounded-xl px-3 py-2 outline-none focus:border-paname-700 transition-colors"
+        >
+          <option value="alpha">A → Z</option>
+          <option value="date_asc">Ancien → Récent</option>
+          <option value="date_desc">Récent → Ancien</option>
+        </select>
+      </div>
 
       {/* ── TABLE DESKTOP (md+) ────────────────────────────────────────────── */}
       <div className="hidden md:block">

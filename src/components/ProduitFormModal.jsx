@@ -23,7 +23,10 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
         ...FORM_VIDE,
         ...produit.id ? {
           designation:      produit.designation,
-          gamme:            produit.gamme,
+          // Si la gamme BDD ne correspond à aucune entrée connue, on revient à la première.
+          // Évite le cas où le <select> affiche visuellement la 1ʳᵉ option sans que
+          // form.gamme ait réellement cette valeur (onChange ne se déclenche alors pas).
+          gamme:            GAMMES.includes(produit.gamme) ? produit.gamme : '',
           st_actuel:        produit.st_actuel ?? '',
           st_min:           produit.st_min ?? '',
           pr_vente:         produit.pr_vente ?? '',
@@ -177,6 +180,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                 onChange={e => setForm(f => ({ ...f, gamme: e.target.value }))}
                 className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
               >
+                <option value="" disabled>— Gamme —</option>
                 {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>

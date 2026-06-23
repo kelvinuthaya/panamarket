@@ -2,12 +2,12 @@
 // Pas de React ici, uniquement des constantes et fonctions pures.
 
 export const GAMMES = [
-  'Boissons énergétiques', 'Alcools', 'Confiseries',
-  'Snacks', 'Hygiène', 'Autres',
+  'Boissons énergétiques', 'Alcools','Autres', 'Boissons', 'Confiseries', 'Eaux', 'Épicerie salée', 'Pains et patisserie', 'Produits laitiers', 'Puffs',
+  'Snacks', 'Hygiène', 
 ]
 
 export const FORM_VIDE = {
-  designation: '', gamme: 'Boissons énergétiques',
+  designation: '', gamme: '',
   code: '', st_actuel: '', st_min: '', pr_vente: '', pr_vente_especes: '',
 }
 
