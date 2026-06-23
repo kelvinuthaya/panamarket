@@ -401,7 +401,11 @@ const Reception = ({
       pr_vente:    parseFloat(formCreation.pr_vente) || 0,
     }
     const { data, error } = await supabase.from('produits').insert(payload).select().single()
-    if (error) { console.error('[Création produit]', error); setSavingCreation(false); return }
+    if (error) {
+      console.error('[Création produit]', error)
+      setSavingCreation(false)
+      return
+    }
     setReceptionItems(prev => [...prev, { produit: data, qtRecue: 1, dlc: '' }])
     setModalCreation(false)
     setFormCreation(FORM_CREATION_VIDE)

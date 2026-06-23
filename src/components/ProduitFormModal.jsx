@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { ScanLine, X, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { GAMMES, FORM_VIDE, detecterGamme } from '../lib/produits'
 
@@ -126,7 +127,9 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
 
     if (error) {
       console.error('[ProduitFormModal] Sauvegarde :', error.message)
+      toast.error('Échec de la sauvegarde du produit')
     } else {
+      toast.success(produit?.id ? 'Produit modifié' : 'Produit ajouté')
       await onSaved()
       onClose()
     }

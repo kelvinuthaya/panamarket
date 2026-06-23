@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Legend,
 } from 'recharts'
+import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { parsePdfCA } from '../lib/parsePdfCA'
@@ -144,6 +145,7 @@ export default function Dashboard() {
       )
       if (error) {
         console.error('Erreur sauvegarde Supabase:', error)
+        toast.error('Échec de la sauvegarde de l\'import')
       } else {
         const parts = data.labelMois.trim().toLowerCase().split(/\s+/)
         const moisIdx = MOIS_IDX[parts[0]]
@@ -179,6 +181,7 @@ export default function Dashboard() {
       )
       if (error) {
         console.error('Erreur sauvegarde Supabase:', error)
+        toast.error('Échec de la sauvegarde de l\'import')
       } else {
         setRefreshKey(k => k + 1)
       }
@@ -214,12 +217,16 @@ export default function Dashboard() {
 
     if (inserts.length > 0) {
       const { error } = await supabase.from('transactions').insert(inserts)
-      if (error) { console.error('Migration erreur:', error); return }
+      if (error) {
+        console.error('Migration erreur:', error)
+        toast.error('Échec de la migration des transactions')
+        return
+      }
     }
 
     localStorage.setItem('migration_v1_done', 'true')
     setMigrationFaite(true)
-    alert(`Migration réussie — ${inserts.length} transaction(s) transférée(s) vers Supabase.`)
+    toast.success(`Migration réussie — ${inserts.length} transaction(s) transférée(s)`)
   }
 
   const labelMoisAffiche = new Date(moisSelectionne + '-15')

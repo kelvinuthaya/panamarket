@@ -473,6 +473,7 @@ export default function Caisse() {
 
   async function supprimerTransaction(id) {
     await supabase.from('transactions').delete().eq('id', id)
+    setToast('Transaction supprimée ✓')
     setTransactions(prev => prev.filter(t => t.id !== id))
   }
 

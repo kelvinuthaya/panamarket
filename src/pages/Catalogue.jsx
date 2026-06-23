@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Plus, Search, Pencil, Trash2, AlertTriangle, Upload } from 'lucide-react'
@@ -75,7 +76,12 @@ export default function Catalogue() {
 
   async function supprimer(id) {
     const { error } = await supabase.from('produits').delete().eq('id', id)
-    if (error) { console.error('[Catalogue] Suppression :', error.message); return }
+    if (error) {
+      console.error('[Catalogue] Suppression :', error.message)
+      toast.error('Échec de la suppression')
+      return
+    }
+    toast.success('Produit supprimé')
     setProduits(prev => prev.filter(p => p.id !== id))
     setConfirmSupp(null)
   }
