@@ -9,16 +9,18 @@ import {
   Package,
   ShoppingCart,
   Wallet,
+  CalendarClock,
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const PRIMARY_LINKS = [
-  { to: '/',          label: 'Accueil',   Icon: Home         },
-  { to: '/catalogue', label: 'Catalogue', Icon: Package      },
-  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart },
-  { to: '/caisse',    label: 'Caisse',    Icon: Wallet       },
-  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3    },
+  { to: '/',           label: 'Accueil',    Icon: Home          },
+  { to: '/catalogue',  label: 'Catalogue',  Icon: Package       },
+  { to: '/achats',     label: 'Achats',     Icon: ShoppingCart  },
+  { to: '/caisse',     label: 'Caisse',     Icon: Wallet        },
+  { to: '/historique', label: 'Historique', Icon: CalendarClock, gerantOnly: true },
+  { to: '/dashboard',  label: 'Dashboard',  Icon: BarChart3,     gerantOnly: true },
 ]
 
 const SidebarLink = ({ to, Icon, children }) => (
@@ -60,7 +62,7 @@ export const Sidebar = () => {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
         {PRIMARY_LINKS
-          .filter(({ to }) => to !== '/dashboard' || estGerant)
+          .filter(({ gerantOnly }) => !gerantOnly || estGerant)
           .map(({ to, label, Icon }) => (
             <SidebarLink key={to} to={to} Icon={Icon}>
               {label}

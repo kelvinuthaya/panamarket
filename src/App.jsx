@@ -6,6 +6,7 @@ import Achats from './pages/Achats'
 import Caisse from './pages/Caisse'
 import Dashboard from './pages/Dashboard'
 import Catalogue from './pages/Catalogue'
+import Historique from './pages/Historique'
 import Login from './pages/Login'
 import { AppShell } from './components/layout/AppShell'
 
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/caisse" element={<Caisse />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/catalogue" element={<Catalogue />} />
+        <Route path="/historique" element={<Historique />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

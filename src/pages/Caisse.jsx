@@ -18,10 +18,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
-import jsPDF from 'jspdf'
 import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2, Printer } from 'lucide-react'
 import ProduitFormModal from '../components/ProduitFormModal'
 import { useAuth } from '../contexts/AuthContext'
+import { bornesJourneeCommerciale, jourCommercial } from '../lib/journee'
+import { genererRecapA4, genererRecapTicket80 } from '../lib/recapPdf'
+import { agregerQuantites } from '../lib/agregats'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -170,7 +172,7 @@ function SectionCategorie({ titre, variant = 'default', produits, ouverte, onTog
 }
 
 export default function Caisse() {
-  const { role } = useAuth()
+  const { role, user } = useAuth()
   const [produits, setProduits]         = useState([])
   const [panier, setPanier]             = useState({})
   const [transactions, setTransactions] = useState([])
@@ -225,21 +227,24 @@ export default function Caisse() {
           }
         } catch {}
 
-        const debutJour = new Date()
-        debutJour.setHours(0, 0, 0, 0)
+        // Bornes de la journée commerciale (bascule 4h Paris) — cf. src/lib/journee.js
+        // À 1h du matin, on charge encore les ventes de la "veille" calendaire.
+        const { debut, fin } = bornesJourneeCommerciale()
         const { data: txnData } = await supabase
           .from('transactions')
           .select('*')
-          .gte('created_at', debutJour.toISOString())
+          .gte('created_at', debut.toISOString())
+          .lt('created_at', fin.toISOString())
           .order('created_at')
 
         if (txnData) {
           setTransactions(txnData.map(t => ({
-            id:       t.id,
-            heure:    new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            produits: t.produits,
-            total:    parseFloat(t.total),
-            paiement: t.paiement,
+            id:        t.id,
+            heure:     new Date(t.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            produits:  t.produits,
+            total:     parseFloat(t.total),
+            paiement:  t.paiement,
+            operateur: t.operateur,
           })))
         }
       }
@@ -395,6 +400,14 @@ export default function Caisse() {
     [transactions]
   )
 
+  // Index { produitId → gamme } reconstitué depuis le catalogue local.
+  // La gamme n'est PAS stockée dans le JSONB des transactions, on la lit
+  // donc depuis l'état `produits` déjà chargé au montage.
+  const gammeParId = useMemo(
+    () => Object.fromEntries(produits.map(p => [p.id, p.gamme || 'Autre'])),
+    [produits]
+  )
+
   const monnaie = useMemo(() => {
     const recu = parseFloat(montantRecu)
     return !isNaN(recu) && recu >= totalPanier ? (recu - totalPanier).toFixed(2) : null
@@ -434,9 +447,18 @@ export default function Caisse() {
     }))
     const total = parseFloat(totalPanier.toFixed(2))
 
+    // Opérateur de la vente : nom dans user_metadata si défini, sinon partie locale de l'email
+    const operateur = user?.user_metadata?.name ?? user?.email?.split('@')[0] ?? 'inconnu'
+
     const { data: inserted, error } = await supabase
       .from('transactions')
-      .insert({ produits: produitsTxn, total, paiement: modePaiement })
+      .insert({
+        produits: produitsTxn,
+        total,
+        paiement: modePaiement,
+        user_id:  user?.id,
+        operateur,
+      })
       .select()
       .single()
 
@@ -458,6 +480,7 @@ export default function Caisse() {
       produits: produitsTxn,
       total,
       paiement: modePaiement,
+      operateur,
     }])
 
     setProduits(prev => prev.map(p => {
@@ -509,147 +532,27 @@ export default function Caisse() {
     setShowRecap(false)
   }
 
-  // ── PDF ────────────────────────────────────────────────────────────────────
+  // ── PDF : délégué à src/lib/recapPdf.js (partagé avec la page Historique) ──
+  // fileLabel = jour commercial 'YYYY-MM-DD' pour rester cohérent même si on
+  // imprime à 1h du matin (la vente du 24/06 à 01:30 produit un fichier ..._2026-06-24)
   function genererPDF() {
-    const doc = new jsPDF()
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(16)
-    doc.text("Panam'arket", 10, 15)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.text('224 rue de Belleville, 75020 Paris', 10, 22)
-    doc.text(`Récapitulatif — ${todayFr}`, 10, 29)
-    doc.line(10, 33, 200, 33)
-
-    let y = 41
-    transactions.forEach((t, idx) => {
-      if (y > 250) { doc.addPage(); y = 15 }
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(10)
-      doc.text(`${t.heure}  Vente #${idx + 1} — ${t.paiement === 'cb' ? 'CB' : 'Espèces'}`, 10, y)
-      y += 7
-      doc.setFont('helvetica', 'normal')
-      t.produits.forEach(p => {
-        if (y > 265) { doc.addPage(); y = 15 }
-        const label = p.designation.length > 40 ? p.designation.slice(0, 38) + '…' : p.designation
-        doc.text(label, 14, y)
-        doc.text(`x${p.quantite}`, 128, y)
-        doc.text(`${p.prixUnitaire.toFixed(2)} €`, 145, y)
-        doc.text(`${(p.quantite * p.prixUnitaire).toFixed(2)} €`, 178, y)
-        y += 6
-      })
-      doc.setFont('helvetica', 'bold')
-      doc.text(`Total : ${t.total.toFixed(2)} €`, 155, y)
-      y += 10
+    const agregats = agregerQuantites(transactions, gammeParId)
+    genererRecapA4(transactions, {
+      dateFr:    todayFr,
+      caJour,
+      fileLabel: jourCommercial(),
+      agregats,
     })
-
-    doc.line(10, y, 200, y)
-    y += 8
-    doc.setFontSize(13)
-    doc.text(`CA DE LA JOURNÉE : ${caJour.toFixed(2)} €`, 140, y)
-    doc.save(`recap_caisse_${today}.pdf`)
   }
 
-  // ── PDF ticket imprimante 80mm (style journal Secure Caisse) ──────────────
-  // Imprimante thermique = rouleau continu : calculer la hauteur AVANT de
-  // créer le doc, sinon papier vide éjecté en bout de ticket.
   function genererRecapTicket() {
-    const eur = (n) => Number(n).toFixed(2).replace('.', ',')
-    const SEP = '-'.repeat(38) // pleine largeur en courier 8 ≈ 38 caractères
-
-    const MARGE_HAUT = 4
-    const MARGE_BAS  = 8
-    const INTERLIGNE = 4
-    // en-tête (~8) + 2 par transaction + 1 par produit + bloc totaux (~8)
-    const nbLignes = 16 + transactions.reduce((n, t) => n + 2 + t.produits.length, 0)
-    const hauteur  = MARGE_HAUT + nbLignes * INTERLIGNE + MARGE_BAS
-
-    const doc = new jsPDF({ unit: 'mm', format: [80, hauteur] })
-    // Bords thermiques rognés : zone utile 4mm → 76mm
-    const LEFT  = 4
-    const RIGHT = 76
-
-    // ── Agrégats ──────────────────────────────────────────────────────────
-    const totalEspeces = transactions.filter(t => t.paiement === 'especes')
-                                     .reduce((s, t) => s + t.total, 0)
-    const totalCB      = transactions.filter(t => t.paiement === 'cb')
-                                     .reduce((s, t) => s + t.total, 0)
-    const totalGeneral = caJour
-    const heures       = transactions.map(t => t.heure)
-    const periodeDebut = heures[0] ?? '--'
-    const periodeFin   = heures[heures.length - 1] ?? '--'
-    const numDoc       = Date.now().toString().slice(-6)
-    const dateFR       = new Date().toLocaleDateString('fr-FR')
-
-    // ── Curseur + helper d'écriture ───────────────────────────────────────
-    let y = MARGE_HAUT
-    const ligne = (txt, align) => {
-      doc.text(txt, align === 'right' ? RIGHT : align === 'center' ? 40 : LEFT, y,
-               align ? { align } : undefined)
-      y += INTERLIGNE
-    }
-
-    // ── En-tête ───────────────────────────────────────────────────────────
-    doc.setFont('courier', 'bold')
-    doc.setFontSize(10)
-    ligne("PANAM'ARKET", 'center')
-    doc.setFont('courier', 'normal')
-    doc.setFontSize(8)
-    ligne(`JOURNAL FINANCIER #${numDoc}`, 'center')
-    ligne(SEP)
-    ligne(`N° Document : ${numDoc}`)
-    ligne(`Opérateur   : PANAM'ARKET`)
-    ligne(`Date        : ${dateFR}`)
-    ligne(`Période     : ${periodeDebut} > ${periodeFin}`)
-    ligne(SEP)
-
-    // ── En-tête colonnes (Opération à gauche, Euro à droite) ─────────────
-    doc.text('Opération', LEFT, y)
-    doc.text('Euro', RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    ligne(SEP)
-
-    // ── Totaux par mode de paiement ──────────────────────────────────────
-    doc.text('Total espèces', LEFT, y)
-    doc.text(eur(totalEspeces), RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    doc.text('Total C.B.', LEFT, y)
-    doc.text(eur(totalCB), RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    ligne(SEP)
-
-    // ── Total général + CA en gras ───────────────────────────────────────
-    doc.setFont('courier', 'bold')
-    doc.text('TOTAL GÉNÉRAL', LEFT, y)
-    doc.text(eur(totalGeneral), RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    doc.text('C.A. TOTAL', LEFT, y)
-    doc.text(eur(totalGeneral), RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    doc.setFont('courier', 'normal')
-    ligne(SEP)
-
-    // ── Nb ventes ─────────────────────────────────────────────────────────
-    doc.text('Nb ventes', LEFT, y)
-    doc.text(String(transactions.length), RIGHT, y, { align: 'right' })
-    y += INTERLIGNE
-    ligne(SEP)
-
-    // ── Détail de chaque vente ───────────────────────────────────────────
-    ligne('< DÉTAIL DES VENTES >')
-    transactions.forEach((t, i) => {
-      ligne(`${t.heure}  Vente #${i + 1}  ${t.paiement === 'cb' ? 'CB' : 'ESP'}`)
-      t.produits.forEach(p => {
-        const lib   = p.designation.slice(0, 22)
-        const total = eur(p.quantite * p.prixUnitaire)
-        doc.text(`${lib}  x${p.quantite}`, LEFT, y)
-        doc.text(total, RIGHT, y, { align: 'right' })
-        y += INTERLIGNE
-      })
+    const agregats = agregerQuantites(transactions, gammeParId)
+    genererRecapTicket80(transactions, {
+      dateFr:    todayFr,
+      caJour,
+      fileLabel: jourCommercial(),
+      agregats,
     })
-    ligne(SEP)
-
-    doc.save(`recap_secure_${today}.pdf`)
   }
 
   // ── Email ──────────────────────────────────────────────────────────────────

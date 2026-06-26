@@ -19,6 +19,7 @@ const ROUTE_TITLES = {
   '/achats':            'Achats',
   '/caisse':            'Caisse',
   '/dashboard':         'Dashboard',
+  '/historique':        'Historique',
   '/approvisionnement': 'Approvisionnement',
   '/livraison':         'Livraison',
 }

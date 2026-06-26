@@ -4,15 +4,16 @@
 // — Tailwind purgerait une classe arbitraire avec env() en build prod
 
 import { NavLink } from 'react-router-dom'
-import { Home, Package, ShoppingCart, Wallet, BarChart3 } from 'lucide-react'
+import { Home, Package, ShoppingCart, Wallet, BarChart3, CalendarClock } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const BASE_TABS = [
-  { to: '/',          label: 'Accueil',   Icon: Home         },
-  { to: '/catalogue', label: 'Catalogue', Icon: Package      },
-  { to: '/achats',    label: 'Achats',    Icon: ShoppingCart },
-  { to: '/caisse',    label: 'Caisse',    Icon: Wallet       },
-  { to: '/dashboard', label: 'Dashboard', Icon: BarChart3,   gerantOnly: true },
+  { to: '/',           label: 'Accueil',    Icon: Home          },
+  { to: '/catalogue',  label: 'Catalogue',  Icon: Package       },
+  { to: '/achats',     label: 'Achats',     Icon: ShoppingCart  },
+  { to: '/caisse',     label: 'Caisse',     Icon: Wallet        },
+  { to: '/historique', label: 'Historique', Icon: CalendarClock, gerantOnly: true },
+  { to: '/dashboard',  label: 'Dashboard',  Icon: BarChart3,     gerantOnly: true },
 ]
 
 export const BottomNav = () => {
