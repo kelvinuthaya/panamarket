@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { BrowserMultiFormatReader } from '@zxing/library'
 import { ScanLine, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
 import { GAMMES, FORM_VIDE, detecterGamme } from '../lib/produits'
+import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 
 export default function ProduitFormModal({ produit, onClose, onSaved }) {
   const [form, setForm]                   = useState(FORM_VIDE)
@@ -14,7 +14,6 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
   const [offMessage, setOffMessage]       = useState('')
 
   const videoRef  = useRef(null)
-  const readerRef = useRef(null)
 
   // (Re)initialise le form à chaque ouverture / changement de produit.
   useEffect(() => {
@@ -42,49 +41,15 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
     setTimeout(() => { document.getElementById('input-code-ean')?.focus() }, 100)
   }, [produit])
 
-  // Délai 50 ms : attend que React ait monté le <video> dans le DOM avant de
-  // passer la ref à ZXing. Absorbe aussi le double-fire de StrictMode en dev.
-  useEffect(() => {
-    if (!scannerOuvert) return
-
-    let cancelled = false
-
-    const timer = setTimeout(() => {
-      if (cancelled || !videoRef.current) return
-
-      const reader = new BrowserMultiFormatReader()
-      readerRef.current = reader
-
-      reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } } },
-        videoRef.current,
-        (result) => {
-          if (!result || cancelled) return
-          cancelled = true
-          reader.reset()
-          readerRef.current = null
-          setScannerOuvert(false)
-
-          const code = result.getText()
-          setForm(f => ({ ...f, code }))
-          setOffMessage('')
-          chercherSurOFF(code)
-        }
-      ).catch(err => {
-        console.error('[Scan] Caméra inaccessible :', err)
-        if (!cancelled) setScannerOuvert(false)
-      })
-    }, 50)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      if (readerRef.current) {
-        readerRef.current.reset()
-        readerRef.current = null
-      }
-    }
-  }, [scannerOuvert])
+  useBarcodeScanner(videoRef, scannerOuvert, (code) => {
+    setScannerOuvert(false)
+    setForm(f => ({ ...f, code }))
+    setOffMessage('')
+    chercherSurOFF(code)
+  }, (err) => {
+    console.error('[Scan] Caméra inaccessible :', err)
+    setScannerOuvert(false)
+  })
 
   async function chercherSurOFF(code) {
     setOffLoading(true)

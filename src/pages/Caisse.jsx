@@ -4,10 +4,10 @@
 // • State : produits, panier, transactions, recherche, loading, modePaiement,
 //   montantRecu, showRecap, showConfirmVider, showConfirmCloturer, toast,
 //   favoris (Set localStorage), sectionOuvertes (Set), scannerOuvert
-// • Refs : videoRef, readerRef, produitRefs, loadedRef
+// • Refs : videoRef, produitRefs, loadedRef
 // • useEffects : init (load produits + panier localStorage + transactions du jour),
 //   ouverture sections au 1er chargement, persist panier, toast auto-dismiss 2.5s,
-//   scanner ZXing (decodeFromConstraints + cleanup)
+//   scanner ZXing via useBarcodeScanner (src/lib/useBarcodeScanner.js)
 // • Functions : toggleFavori, toggleSection, changer, validerVente,
 //   supprimerTransaction, viderPanier, cloturerJournee, genererPDF, envoyerEmail
 // • Sub-components : CarteProduit, SectionCategorie
@@ -16,7 +16,6 @@
 // • horloge (useState + useEffect setInterval 60s)
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
 import { supabase } from '../lib/supabase'
 import { Search, Plus, Minus, FileText, Mail, X, AlertTriangle, ScanLine, Trash2, Printer } from 'lucide-react'
 import ProduitFormModal from '../components/ProduitFormModal'
@@ -24,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { bornesJourneeCommerciale, jourCommercial } from '../lib/journee'
 import { genererRecapA4, genererRecapTicket80 } from '../lib/recapPdf'
 import { agregerQuantites } from '../lib/agregats'
+import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 
 const today   = new Date().toLocaleDateString('en-CA')
 const todayFr = new Date().toLocaleDateString('fr-FR', {
@@ -204,7 +204,6 @@ export default function Caisse() {
   // Scanner
   const [scannerOuvert, setScannerOuvert] = useState(false)
   const videoRef    = useRef(null)
-  const readerRef   = useRef(null)
   const produitRefs = useRef({})
   const loadedRef   = useRef(false)
 
@@ -284,49 +283,23 @@ export default function Caisse() {
   useEffect(() => { setVisible(20) }, [recherche])
 
   // ── Scanner ZXing ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!scannerOuvert) return
-    let cancelled = false
+  useBarcodeScanner(videoRef, scannerOuvert, (code) => {
+    setScannerOuvert(false)
 
-    const timer = setTimeout(() => {
-      if (cancelled || !videoRef.current) return
-      const reader = new BrowserMultiFormatReader()
-      readerRef.current = reader
-
-      reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } } },
-        videoRef.current,
-        (result) => {
-          if (!result || cancelled) return
-          cancelled = true
-          reader.reset()
-          readerRef.current = null
-          setScannerOuvert(false)
-
-          const code    = result.getText()
-          const produit = produits.find(p => p.code === code)
-          if (produit) {
-            setRecherche('')
-            setPanier(prev => ({ ...prev, [produit.id]: (prev[produit.id] ?? 0) + 1 }))
-            setTimeout(() => {
-              produitRefs.current[produit.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            }, 80)
-          } else {
-            setCodeInconnu(code)
-          }
-        }
-      ).catch(err => {
-        console.error('[Scan Caisse] Caméra inaccessible :', err)
-        if (!cancelled) setScannerOuvert(false)
-      })
-    }, 50)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      if (readerRef.current) { readerRef.current.reset(); readerRef.current = null }
+    const produit = produits.find(p => p.code === code)
+    if (produit) {
+      setRecherche('')
+      setPanier(prev => ({ ...prev, [produit.id]: (prev[produit.id] ?? 0) + 1 }))
+      setTimeout(() => {
+        produitRefs.current[produit.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 80)
+    } else {
+      setCodeInconnu(code)
     }
-  }, [scannerOuvert, produits])
+  }, (err) => {
+    console.error('[Scan Caisse] Caméra inaccessible :', err)
+    setScannerOuvert(false)
+  })
 
   // ── Scanner USB HID (clavier) ─────────────────────────────────────────────
   // Un scanner USB envoie les caractères en < 80 ms puis un Enter.

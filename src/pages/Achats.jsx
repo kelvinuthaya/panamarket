@@ -8,8 +8,8 @@
  *
  * Reception :
  *   state  : scannerOuvert, offLoading, offMessage, modalCreation, formCreation, savingCreation
- *   refs   : videoRef, readerRef
- *   effects: ZXing scanner (delay 50ms pattern)
+ *   refs   : videoRef
+ *   effects: useBarcodeScanner (src/lib/useBarcodeScanner.js)
  *   fns    : handleScan, chercherSurOFF, sauvegarderNouveauProduit, retirerItem,
  *            formatDLC, isDLCValide, updateQty, updateDlc
  *
@@ -23,7 +23,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { Search, X, ScanLine, Loader2, AlertTriangle, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -309,39 +309,14 @@ const Reception = ({
   const [formCreation, setFormCreation]   = useState(FORM_CREATION_VIDE)
   const [savingCreation, setSavingCreation] = useState(false)
   const videoRef  = useRef(null)
-  const readerRef = useRef(null)
 
-  // ── Scanner ZXing (même pattern que Catalogue.jsx) ───────────────────────
-  // Délai 50 ms : attend que React ait monté le <video> dans le DOM avant ZXing
-  useEffect(() => {
-    if (!scannerOuvert) return
-    let cancelled = false
-    const timer = setTimeout(() => {
-      if (cancelled || !videoRef.current) return
-      const reader = new BrowserMultiFormatReader()
-      readerRef.current = reader
-      reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } } },
-        videoRef.current,
-        (result) => {
-          if (!result || cancelled) return
-          cancelled = true
-          reader.reset()
-          readerRef.current = null
-          setScannerOuvert(false)
-          handleScan(result.getText())
-        }
-      ).catch(err => {
-        console.error('[Scan Réception] Caméra inaccessible :', err)
-        if (!cancelled) setScannerOuvert(false)
-      })
-    }, 50)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-      if (readerRef.current) { readerRef.current.reset(); readerRef.current = null }
-    }
-  }, [scannerOuvert])
+  useBarcodeScanner(videoRef, scannerOuvert, (code) => {
+    setScannerOuvert(false)
+    handleScan(code)
+  }, (err) => {
+    console.error('[Scan Réception] Caméra inaccessible :', err)
+    setScannerOuvert(false)
+  })
 
   // ── Gestion du code scanné ───────────────────────────────────────────────
   async function handleScan(code) {
