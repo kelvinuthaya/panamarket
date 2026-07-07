@@ -40,7 +40,7 @@ non évidents en commentaire dans le code.
 **Employés :** ~4 personnes. Gérant : Christian Francis
 **Produits actifs :** ~50 références (catalogue évolutif, nouveaux produits fréquents)
 **Développeur :** Kelvin Uthayakumar — stagiaire BUT3 Informatique
-**Stack :** React 18 + Vite, Tailwind CSS v3, Supabase (PostgreSQL), déployé sur Netlify
+**Stack :** React 19 + Vite, Tailwind CSS v3, Supabase (PostgreSQL), déployé sur Netlify
 **Repo GitHub :** github.com/kelvinuthaya/panamarket (public)
 
 ---
@@ -131,7 +131,7 @@ Utilisateur : Manager (desktop)
 
 | Couche        | Technologie                        |
 |---------------|------------------------------------|
-| Front         | React 18 + Vite                    |
+| Front         | React 19 + Vite                    |
 | CSS           | Tailwind CSS v3                    |
 | Routing       | React Router v6                    |
 | Back          | Supabase (PostgreSQL + Auth)       |
