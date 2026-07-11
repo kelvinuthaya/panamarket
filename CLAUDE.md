@@ -42,21 +42,38 @@ non évidents en commentaire dans le code.
 **Développeur :** Kelvin Uthayakumar — stagiaire BUT3 Informatique
 **Stack :** React 19 + Vite, Tailwind CSS v3, Supabase (PostgreSQL), déployé sur Netlify
 **Repo GitHub :** github.com/kelvinuthaya/panamarket (public)
+**Cahier des charges à jour :** page Notion « Cahier des Charges » (id 341d6a7d-cd63-818f-9ce7-dbfc147b6199)
 
 ---
 
 ## Architecture des fichiers
 
 src/
+├── contexts/
+│   └── AuthContext.jsx       # Session Supabase + rôle normalisé (employe/manager/gerant)
 ├── lib/
-│   └── supabase.js           # Client Supabase — ne pas modifier
+│   ├── supabase.js           # Client Supabase — ne pas modifier
+│   ├── produits.js           # GAMMES, getStatut, detecterGamme, chercherProduitOFF (Open Food Facts)
+│   ├── journee.js            # Journée commerciale (bascule 4h Paris) + bornes semaine/mois/année — testée
+│   ├── agregats.js           # Agrégation quantités vendues par gamme (fonctions pures) — testée
+│   ├── recapPdf.js           # Tickets PDF A4 + 80mm (jsPDF), partagé Caisse/Historique
+│   ├── parsePdfCA.js         # Import PDF mensuel Secure Caisse (pdf.js CDN)
+│   ├── parseCsvCA.js         # Import CSV Secure Caisse (CA/jour + répartition TVA)
+│   └── useBarcodeScanner.js  # Hook caméra ZXing partagé (Caisse, Achats, ProduitFormModal)
 ├── components/
-│   └── ProduitCard.jsx       # Carte produit réutilisable
+│   ├── ProduitFormModal.jsx  # Création/édition produit (scan + Open Food Facts)
+│   ├── ui/                   # Card, Badge, StatusDot, Button, Tag
+│   └── layout/               # AppShell, Sidebar (desktop), BottomNav (mobile), TopBar, Drawer
 └── pages/
-    ├── Ruptures.jsx          # Module 1 — ruptures de stock (employé, mobile)
-    ├── Approvisionnement.jsx # Module 2 — liste de courses (manager, mobile)
-    ├── Caisse.jsx            # Module 3 — caisse simulée (employé, mobile)
-    └── Dashboard.jsx         # Module 4 — statistiques (manager, desktop)
+    ├── Home.jsx              # Accueil, tuiles selon rôle
+    ├── Login.jsx             # Auth Supabase
+    ├── Catalogue.jsx         # CRUD produits + filtres statut/gamme + badges DLC (manager/gérant pour modif)
+    ├── Achats.jsx            # 3 onglets : liste de courses / réception (scan+DLC) / historique livraisons
+    ├── Caisse.jsx            # Panier, prix CB/espèces, transactions immuables, tickets PDF (thème dark PANAME OS)
+    ├── Historique.jsx        # Journées de caisse passées, périodes jour/semaine/mois/année (gérant)
+    └── Dashboard.jsx         # CA, top 5, imports Secure Caisse (gérant, redirige sinon)
+
+Tests : `src/lib/*.test.js` (vitest) — `npm test`. Les fonctions métier pures vont dans src/lib pour rester testables.
 
 ---
 
@@ -64,66 +81,71 @@ src/
 
 Table `produits` :
 
-| Colonne    | Type           | Description                                      |
-|------------|----------------|--------------------------------------------------|
-| id         | int8, identity | Clé primaire auto-incrémentée                    |
-| code       | text           | Code-barres EAN13                                |
-| designation| text           | Nom du produit                                   |
-| gamme      | text           | Catégorie (Boissons énergétiques, Alcools, etc.) |
-| st_actuel  | float4         | Stock actuel en rayon                            |
-| st_min     | float4         | Seuil minimum — rupture si st_actuel < st_min    |
-| pr_vente   | float4         | Prix de vente en euros                           |
+| Colonne          | Type           | Description                                        |
+|------------------|----------------|----------------------------------------------------|
+| id               | int8, identity | Clé primaire auto-incrémentée                      |
+| code             | text           | Code-barres EAN13 (nullable)                       |
+| designation      | text           | Nom du produit                                     |
+| gamme            | text           | Catégorie (12 gammes, source : lib/produits.js)    |
+| st_actuel        | float4         | Stock actuel en rayon                              |
+| st_min           | float4         | Seuil minimum — rupture si st_actuel < st_min      |
+| pr_vente         | float4         | Prix de vente CB en euros                          |
+| pr_vente_especes | float4, null   | Prix espèces si différencié (ex. puffs), sinon null|
 
-Logique rupture :
-- st_actuel === 0 → Rupture totale (rouge) — commander en urgence
-- st_actuel > 0 && st_actuel < st_min → Stock insuffisant (orange) — planifier commande
-- st_actuel >= st_min → En stock (vert)
+Autres tables :
+- `transactions` : id, created_at, user_id, operateur (text), produits (jsonb), total, paiement ('cb'|'especes')
+- `livraisons` : id, created_at, user_id
+- `stock_dlc` : id, produit_id (FK), designation, quantite, dlc (date, nullable), livraison_id (FK)
+- `ca_importe` : jour, ca, source ('pdf'|'csv'), label_mois, nb_transactions, panier_moyen, imported_by — upsert (source, jour)
+
+**Journal immuable** : les lignes de vente (id, designation, quantite, prixUnitaire au prix
+réellement encaissé) + total/paiement/operateur sont FIGÉES en jsonb à la validation.
+Rien n'est recalculé à la lecture, SAUF la gamme, reconstruite depuis la table `produits`
+(exception documentée dans lib/agregats.js).
+
+Logique statut (source unique : `getStatut` dans lib/produits.js) :
+- st_actuel === 0 → 'rupture' (rouge) — commander en urgence
+- 0 < st_actuel < st_min → 'faible' (orange) — planifier commande
+- st_actuel >= st_min → 'ok' (vert)
+
+**Journée commerciale** : bascule à 4h du matin Paris (l'épicerie ferme à 2h). Toujours
+passer par lib/journee.js (bornesJourneeCommerciale, bornesSemaine, bornesMois, bornesAnnee)
+pour borner une requête transactions — jamais de minuit calendaire.
 
 URL Supabase : https://oiqguvuceghiokgpafca.supabase.co
-RLS : désactivé pour l'instant (à activer avec l'auth en semaine 5-6)
+RLS : désactivé pour l'instant
 
 ---
 
-## Spécification fonctionnelle
+## Rôles (3, via Supabase Auth)
 
-### Module 1 — Ruptures de stock
-Utilisateur : Employé (mobile)
-- Afficher la liste de tous les produits avec leur statut (rupture / insuffisant / ok)
-- Filtres : Tous / Rupture / Stock insuffisant / En stock
-- Bouton "Signaler rupture" sur chaque ProduitCard → update st_actuel dans Supabase
-- Scanner un code-barres produit avec la caméra pour retrouver un produit rapidement
+| Rôle    | Device           | Accès                                                    |
+|---------|------------------|----------------------------------------------------------|
+| Employé | Mobile           | Catalogue (lecture), Caisse, Achats                      |
+| Manager | Mobile + desktop | + modification catalogue                                 |
+| Gérant  | Mobile + desktop | Tout : Dashboard, Historique, imports, suppression vente |
 
-### Module 2 — Approvisionnement
-Utilisateur : Manager (mobile)
-- Consulter la liste des produits en rupture ou stock insuffisant
-- Générer une liste de courses dynamique (produits à commander)
-- Marquer un produit comme commandé / réapprovisionné
+Le rôle vient de user.app_metadata.role (fallback user_metadata), normalisé
+sans accents ni majuscules dans AuthContext.
 
-### Module 3 — Caisse simulée
-Utilisateur : Employé (mobile)
-- Liste des produits avec compteurs de quantité (+/-)
-- Scanner un code-barres pour ajouter un produit hors liste
-- Total journalier en temps réel
-- Génération ticket PDF en fin de journée
-- Envoi du ticket par email
-- Sauvegarde pour suivi CA mensuel
+---
 
-### Module 4 — Dashboard statistiques
-Utilisateur : Manager (desktop)
-- CA fictif jour par jour
-- CA mensuel cumulé avec graphique (Recharts)
-- Top 5 produits les plus vendus
-- Évolution mois par mois
-- Nombre de ruptures signalées par semaine
+## Spécification fonctionnelle (résumé — détail dans le Notion)
 
-### Fonctionnalités transversales
-- Authentification 2 rôles (employé / manager) via Supabase Auth
-- Gestion catalogue : ajout / modif / suppression produit par le manager
-- Ajout produit par scan code-barres
-- (Bonus) Ajout produit par photo via Claude API Vision
-- App installable sur téléphone (manifest.json PWA)
-- Navigation bottom bar mobile (4 onglets)
-- Responsive mobile-first sur toutes les pages
+- **Catalogue** (ex-« Ruptures ») : liste + filtres statut/gamme/tri, badges DLC (urgence colorée),
+  CRUD manager/gérant, ajout par scan ZXing + auto-remplissage Open Food Facts, scanner USB HID.
+- **Achats** (fusion Approvisionnement + Livraison) : liste de courses auto (ruptures puis stocks
+  faibles) + ajouts manuels ; réception par scan avec quantités et DLC (JJ/MM/AAAA) ; validation →
+  st_actuel + stock_dlc + livraison ; historique des livraisons.
+- **Caisse** : compteurs +/-, recherche, favoris épinglés, scan caméra + USB, prix différencié
+  CB/espèces recalculé au basculement, validation → transaction immuable + décrément stock,
+  récap jour, tickets PDF A4 et 80mm, envoi mailto, panier persisté en localStorage.
+- **Historique** (gérant) : re-génération des tickets d'une journée/semaine/mois/année passée,
+  traçabilité opérateur.
+- **Dashboard** (gérant) : CA du mois, BarChart CA/jour (app + importé), top 5, alertes stock,
+  import PDF/CSV Secure Caisse persisté dans ca_importe, répartition TVA (après import CSV).
+- Reste à faire (cf. Notion) : graphique empilé TVA, ajout produit par photo (Claude Vision,
+  évolution future), bouton « Signaler rupture » employé (décision en attente).
 
 ---
 
@@ -133,12 +155,17 @@ Utilisateur : Manager (desktop)
 |---------------|------------------------------------|
 | Front         | React 19 + Vite                    |
 | CSS           | Tailwind CSS v3                    |
-| Routing       | React Router v6                    |
+| Routing       | React Router v7                    |
 | Back          | Supabase (PostgreSQL + Auth)       |
-| Scan          | librairie barcode (à définir)      |
-| PDF           | librairie PDF (à définir)          |
+| Scan          | @zxing/library (hook partagé)      |
+| PDF tickets   | jsPDF                              |
+| PDF parsing   | pdf.js v3 (CDN)                    |
+| Charts        | Recharts                           |
+| Icons         | lucide-react                       |
+| Toasts        | sonner (Toaster dans App.jsx)      |
+| Tests         | vitest (src/lib/*.test.js)         |
 | Deploy        | Netlify                            |
-| Vision IA     | Claude API (bonus)                 |
+| Vision IA     | Claude API (bonus, non fait)       |
 
 ---
 
@@ -149,17 +176,26 @@ Utilisateur : Manager (desktop)
 - Composants : fonctionnels uniquement, pas de classes React
 - Imports : toujours en haut de fichier
 - Supabase : toujours destructurer { data, error }, toujours gérer l'erreur
+- Logique métier pure (dates, agrégats, statuts) : dans src/lib, testable sans React
 
 ---
 
 ## Design system
 
-- Palette : fond gris très léger (#F9FAFB), blanc pour les cards
-- Vert (#1D9E75) : couleur principale, actions, succès
-- Bleu (#378ADD) : informations
-- Orange (#F59E0B) : stock insuffisant
-- Rouge (#EF4444) : rupture totale, danger
-- Cards : fond blanc, border gris léger, border-radius 12px, shadow légère
-- Mobile-first : optimisé pour utilisation à une main en rayon
-- Navigation : bottom bar fixe sur mobile, 4 onglets (Ruptures, Appro, Caisse, Dashboard)
-- Pas de gradients lourds, pas de shadows excessives
+Deux ambiances coexistent :
+- **Pages claires** (Catalogue, Achats, Dashboard) : fond #F9FAFB, cards blanches,
+  border-radius 12-16px, shadows légères.
+- **PANAME OS dark** (Caisse, Historique) : fond `bitume`, accents `eiffel` (jaune),
+  `paname` (vert gradient), `pavillon` (rouge), `signal` (vert), typo `tag-street`.
+
+- Statuts : vert = ok, orange/eiffel = stock faible, rouge/pavillon = rupture
+- Mobile-first : utilisation à une main en rayon ; BottomNav mobile, Sidebar desktop
+- Toasts : sonner (Catalogue, Dashboard, ProduitFormModal) ; Caisse et Achats ont un
+  toast local useState — NE PAS importer `toast` de sonner dans ces deux fichiers
+  (collision de nom avec le useState local déjà vécue)
+
+---
+
+## Données
+
+- `data/*.csv` : imports initiaux et enrichissements EAN du catalogue (traçabilité, ne pas supprimer)
