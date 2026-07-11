@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { parsePdfCA } from '../lib/parsePdfCA'
 import { parseCsvCA } from '../lib/parseCsvCA'
+import { bornesMois } from '../lib/journee'
 import {
   TrendingUp, ShoppingBag, AlertTriangle, AlertCircle,
   Package, FileText, FileSpreadsheet, Receipt, ShoppingCart,
@@ -60,11 +61,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      const debutMois = new Date(moisSelectionne + '-01')
-      debutMois.setHours(0, 0, 0, 0)
+      // Bornes du mois calées sur la journée commerciale (bascule 4h Paris),
+      // comme Caisse et Historique — sinon le CA mensuel diverge pour les
+      // ventes entre minuit et 4h en bord de mois. dateRef au 15 à midi :
+      // n'importe quel instant du mois convient pour obtenir ses bornes.
       const [annee, mois] = moisSelectionne.split('-').map(Number)
-      const finMois = new Date(annee, mois, 0)
-      finMois.setHours(23, 59, 59, 999)
+      const { debut: debutMois, fin: finMois } = bornesMois(new Date(moisSelectionne + '-15T12:00:00'))
 
       const premierJour = new Date(annee, mois - 1, 1).toISOString().slice(0, 10)
       const dernierJour = new Date(annee, mois, 0).toISOString().slice(0, 10)
@@ -74,7 +76,7 @@ export default function Dashboard() {
           .from('transactions')
           .select('total, created_at, produits')
           .gte('created_at', debutMois.toISOString())
-          .lte('created_at', finMois.toISOString())
+          .lt('created_at', finMois.toISOString())
           .order('created_at', { ascending: true }),
         supabase
           .from('produits')
