@@ -113,7 +113,8 @@ passer par lib/journee.js (bornesJourneeCommerciale, bornesSemaine, bornesMois, 
 pour borner une requête transactions — jamais de minuit calendaire.
 
 URL Supabase : https://oiqguvuceghiokgpafca.supabase.co
-RLS : désactivé pour l'instant
+RLS : actif sur toutes les tables via public.current_role() qui lit app_metadata.role
+(commit d433128 ; audit sécurité du 24/06 : search_path fixé, policies WITH CHECK (true) corrigées)
 
 ---
 
