@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ScanLine, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../lib/supabase'
-import { GAMMES, FORM_VIDE, detecterGamme } from '../lib/produits'
+import { GAMMES, FORM_VIDE, chercherProduitOFF } from '../lib/produits'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 
 export default function ProduitFormModal({ produit, onClose, onSaved }) {
@@ -55,14 +55,12 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
     setOffLoading(true)
     setOffMessage('')
     try {
-      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
-      const data = await res.json()
-      if (data.status === 1) {
-        const p = data.product
+      const trouve = await chercherProduitOFF(code)
+      if (trouve) {
         setForm(f => ({
           ...f,
-          designation: p.product_name || f.designation,
-          gamme:       detecterGamme(p.categories_tags),
+          designation: trouve.designation || f.designation,
+          gamme:       trouve.gamme,
         }))
       } else {
         setOffMessage('Produit non trouvé dans la base Open Food Facts')

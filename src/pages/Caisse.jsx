@@ -23,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { bornesJourneeCommerciale, jourCommercial } from '../lib/journee'
 import { genererRecapA4, genererRecapTicket80 } from '../lib/recapPdf'
 import { agregerQuantites } from '../lib/agregats'
+import { getStatut } from '../lib/produits'
 import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 
 const today   = new Date().toLocaleDateString('en-CA')
@@ -49,7 +50,7 @@ const prixApplique = (p, mode) =>
 // ── Carte produit (mode browse) — version dark ─────────────────────────────
 function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, innerRef }) {
   const prix = prixApplique(p, mode)
-  const statut     = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+  const statut     = getStatut(p)
   const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
   return (
     <div

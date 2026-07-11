@@ -27,53 +27,20 @@ import { useBarcodeScanner } from '../lib/useBarcodeScanner'
 import { Search, X, ScanLine, Loader2, AlertTriangle, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { GAMMES, getStatut, chercherProduitOFF } from '../lib/produits'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { StatusDot } from '../components/ui/StatusDot'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const GAMMES = [
-  'Boissons énergétiques', 'Alcools', 'Confiseries',
-  'Snacks', 'Hygiène', 'Autres',
-]
-
 const FORM_CREATION_VIDE = {
   designation: '', gamme: 'Boissons énergétiques',
   code: '', st_min: '', pr_vente: '',
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const getStatut = (p) => {
-  if (p.st_actuel === 0) return 'rupture'
-  if (p.st_actuel < p.st_min) return 'insuffisant'
-  return 'ok'
-}
-
-const ORDRE_MODAL = { insuffisant: 0, rupture: 1, ok: 2 }
-
-// Traduit categories_tags Open Food Facts vers nos 6 gammes
-function detecterGamme(categoriesTags = []) {
-  const cats = categoriesTags.map(c => c.toLowerCase())
-  if (cats.some(c => c.includes('energy-drink'))) return 'Boissons énergétiques'
-  if (cats.some(c =>
-    c.includes('alcohol') || c.includes('beer') || c.includes('wine') ||
-    c.includes('spirit') || c.includes('liqueur') || c.includes('aperitif')
-  )) return 'Alcools'
-  if (cats.some(c =>
-    c.includes('confection') || c.includes('candy') || c.includes('chocolate') ||
-    c.includes('biscuit') || c.includes('sweet') || c.includes('bonbon')
-  )) return 'Confiseries'
-  if (cats.some(c =>
-    c.includes('snack') || c.includes('chip') || c.includes('crisp') || c.includes('nuts')
-  )) return 'Snacks'
-  if (cats.some(c =>
-    c.includes('hygiene') || c.includes('personal-care') ||
-    c.includes('cosmetic') || c.includes('soap') || c.includes('shampoo')
-  )) return 'Hygiène'
-  return 'Autres'
-}
+// Ordre d'affichage dans le modal d'ajout : stocks faibles d'abord
+const ORDRE_MODAL = { faible: 0, rupture: 1, ok: 2 }
 
 // ─── Sous-composant ListeCourses ──────────────────────────────────────────────
 
@@ -104,9 +71,9 @@ const ListeCourses = ({
     setRecherche('')
   }
 
-  const ruptures = listeCourses.filter(i => i.produit.st_actuel === 0)
-  const insuff   = listeCourses.filter(i => i.produit.st_actuel > 0 && i.produit.st_actuel < i.produit.st_min)
-  const manuels  = listeCourses.filter(i => i.produit.st_actuel >= i.produit.st_min)
+  const ruptures = listeCourses.filter(i => getStatut(i.produit) === 'rupture')
+  const insuff   = listeCourses.filter(i => getStatut(i.produit) === 'faible')
+  const manuels  = listeCourses.filter(i => getStatut(i.produit) === 'ok')
 
   const nbCoches = receptionItems.length
 
@@ -117,7 +84,7 @@ const ListeCourses = ({
     return (
       <Card
         key={p.id}
-        variant={statut === 'rupture' ? 'rupture' : statut === 'insuffisant' ? 'faible' : 'default'}
+        variant={statut === 'ok' ? 'default' : statut}
         className={`flex items-center gap-3 ${item.checked ? 'opacity-40' : ''}`}
       >
         {/* Checkbox circulaire personnalisée */}
@@ -268,8 +235,7 @@ const ListeCourses = ({
               )}
               {produitsDisponibles.map(p => {
                 const statut = getStatut(p)
-                const badgeVariant = statut === 'rupture' ? 'rupture' : statut === 'insuffisant' ? 'faible' : 'ok'
-                const badgeLabel = { rupture: 'Rupture', insuffisant: 'Insuffisant', ok: 'En stock' }[statut]
+                const badgeLabel = { rupture: 'Rupture', faible: 'Insuffisant', ok: 'En stock' }[statut]
                 return (
                   <button
                     key={p.id}
@@ -280,7 +246,7 @@ const ListeCourses = ({
                       <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
                       <p className="font-mono text-[10px] text-zinc-400">{p.gamme} · {p.st_actuel}/{p.st_min} u.</p>
                     </div>
-                    <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                    <Badge variant={statut}>{badgeLabel}</Badge>
                   </button>
                 )
               })}
@@ -344,14 +310,12 @@ const Reception = ({
     setOffLoading(true)
     setOffMessage('')
     try {
-      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
-      const data = await res.json()
-      if (data.status === 1) {
-        const p = data.product
+      const trouve = await chercherProduitOFF(code)
+      if (trouve) {
         setFormCreation(f => ({
           ...f,
-          designation: p.product_name || f.designation,
-          gamme:       detecterGamme(p.categories_tags),
+          designation: trouve.designation || f.designation,
+          gamme:       trouve.gamme,
         }))
       } else {
         setOffMessage('Produit non trouvé dans Open Food Facts')
@@ -789,8 +753,8 @@ const Achats = () => {
       const { data, error } = await supabase.from('produits').select('*')
       if (error) { console.error(error); setLoading(false); return }
 
-      const rupturesTotales = data.filter(p => p.st_actuel === 0)
-      const insuff = data.filter(p => p.st_actuel > 0 && p.st_actuel < p.st_min)
+      const rupturesTotales = data.filter(p => getStatut(p) === 'rupture')
+      const insuff = data.filter(p => getStatut(p) === 'faible')
       const initial = [...rupturesTotales, ...insuff].map(p => ({ produit: p, checked: false }))
 
       setProduitsCatalogue(data)

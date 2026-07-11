@@ -8,7 +8,7 @@ import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import ProduitFormModal from '../components/ProduitFormModal'
-import { GAMMES } from '../lib/produits'
+import { GAMMES, getStatut } from '../lib/produits'
 
 // Calcul du badge DLC : couleur + préfixe selon l'urgence (cf. ancien Catalogue)
 function badgeDLC(dlcIso) {
@@ -98,7 +98,7 @@ export default function Catalogue() {
     const filtres = produits.filter(p => {
       const matchTexte = p.designation.toLowerCase().includes(recherche.toLowerCase().trim())
       const matchGamme = !gammeFiltre || p.gamme === gammeFiltre
-      const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+      const statut = getStatut(p)
       const matchStatut = statutFiltre === 'tous' || statut === statutFiltre
       return matchTexte && matchGamme && matchStatut
     })
@@ -267,7 +267,7 @@ export default function Catalogue() {
                 </tr>
               )}
               {produitsFiltres.slice(0, visible).map(p => {
-                const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+                const statut = getStatut(p)
                 const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
                 const dlc = badgeDLC(dlcParProduit[p.id]?.dlc)
                 return (
@@ -348,7 +348,7 @@ export default function Catalogue() {
           </div>
         )}
         {produitsFiltres.slice(0, visible).map(p => {
-          const statut = p.st_actuel === 0 ? 'rupture' : p.st_actuel < p.st_min ? 'faible' : 'ok'
+          const statut = getStatut(p)
           const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
           const dlc = badgeDLC(dlcParProduit[p.id]?.dlc)
           return (
