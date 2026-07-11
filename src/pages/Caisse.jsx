@@ -441,11 +441,13 @@ export default function Caisse() {
       return
     }
 
-    await Promise.all(articlesEnPanier.map(p =>
+    const resultatsStock = await Promise.all(articlesEnPanier.map(p =>
       supabase.from('produits').update({
         st_actuel: Math.max(0, p.st_actuel - panier[p.id])
       }).eq('id', p.id)
     ))
+    // La vente est déjà enregistrée : on signale seulement l'échec du stock
+    const stockKo = resultatsStock.some(r => r.error)
 
     const heure = new Date(inserted.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
     setTransactions(prev => [...prev, {
@@ -465,13 +467,37 @@ export default function Caisse() {
 
     setPanier({})
     setMontantRecu('')
-    setToast('Vente enregistrée ✓')
+    setToast(stockKo ? 'Vente enregistrée — échec de mise à jour du stock' : 'Vente enregistrée ✓')
   }
 
   async function supprimerTransaction(id) {
-    await supabase.from('transactions').delete().eq('id', id)
-    setToast('Transaction supprimée ✓')
+    const txn = transactions.find(t => t.id === id)
+    const { error } = await supabase.from('transactions').delete().eq('id', id)
+    if (error) {
+      setToast('Erreur — transaction non supprimée')
+      return
+    }
+
+    // La vente annulée rend son stock. On ignore les produits supprimés du
+    // catalogue depuis la vente (leur id n'existe plus dans `produits`).
+    const lignesConnues = (txn?.produits ?? []).filter(ligne =>
+      produits.some(p => p.id === ligne.id)
+    )
+    const resultats = await Promise.all(lignesConnues.map(ligne => {
+      const produit = produits.find(p => p.id === ligne.id)
+      return supabase.from('produits')
+        .update({ st_actuel: produit.st_actuel + ligne.quantite })
+        .eq('id', ligne.id)
+    }))
+
+    setProduits(prev => prev.map(p => {
+      const ligne = lignesConnues.find(l => l.id === p.id)
+      return ligne ? { ...p, st_actuel: p.st_actuel + ligne.quantite } : p
+    }))
     setTransactions(prev => prev.filter(t => t.id !== id))
+    setToast(resultats.some(r => r.error)
+      ? 'Transaction supprimée — échec de restauration du stock'
+      : 'Transaction supprimée, stock restauré ✓')
   }
 
   async function onProduitAjoute() {
@@ -995,8 +1021,8 @@ export default function Caisse() {
               <h2 className="font-display font-bold text-base text-white">Clôturer la journée ?</h2>
             </div>
             <p className="text-sm text-zinc-400 mb-6">
-              Toutes les transactions et le CA seront remis à zéro.
-              Cette action est irréversible.
+              L'affichage de la journée repart à zéro et le panier est vidé.
+              Les ventes restent enregistrées dans l'historique.
             </p>
             <div className="flex gap-3">
               <button

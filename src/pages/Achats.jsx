@@ -816,10 +816,12 @@ const Achats = () => {
     try {
       // 1. Mettre à jour st_actuel de chaque produit (stock actuel + qté reçue)
       for (const item of receptionItems) {
-        await supabase
+        const { error } = await supabase
           .from('produits')
           .update({ st_actuel: item.produit.st_actuel + item.qtRecue })
           .eq('id', item.produit.id)
+        // Remonte au catch : toast d'erreur au lieu d'un faux succès
+        if (error) throw error
       }
 
       // 2. Créer la livraison
@@ -846,7 +848,8 @@ const Achats = () => {
       }))
 
       if (lignesRecues.length > 0) {
-        await supabase.from('stock_dlc').insert(lignesRecues)
+        const { error } = await supabase.from('stock_dlc').insert(lignesRecues)
+        if (error) throw error
       }
 
       // 4. Reset
