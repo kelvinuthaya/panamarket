@@ -174,6 +174,9 @@ function SectionCategorie({ titre, variant = 'default', produits, ouverte, onTog
 
 export default function Caisse() {
   const { role, user } = useAuth()
+  // La policy RLS produits_insert est réservée manager/gérant : on ne propose
+  // pas à l'employé un flux de création que la base refuserait de toute façon.
+  const peutCreerProduit = role === 'manager' || role === 'gerant'
   const [produits, setProduits]         = useState([])
   const [panier, setPanier]             = useState({})
   const [transactions, setTransactions] = useState([])
@@ -441,10 +444,12 @@ export default function Caisse() {
       return
     }
 
+    // RPC SECURITY DEFINER plutôt qu'UPDATE direct : la policy produits_update
+    // est réservée manager/gérant, et un UPDATE filtré par RLS échoue SANS erreur
+    // (0 ligne) — le stock ne bougeait jamais pour une vente employé. La fonction
+    // SQL decrementer_stock ne touche que st_actuel, de façon atomique.
     const resultatsStock = await Promise.all(articlesEnPanier.map(p =>
-      supabase.from('produits').update({
-        st_actuel: Math.max(0, p.st_actuel - panier[p.id])
-      }).eq('id', p.id)
+      supabase.rpc('decrementer_stock', { pid: p.id, qte: panier[p.id] })
     ))
     // La vente est déjà enregistrée : on signale seulement l'échec du stock
     const stockKo = resultatsStock.some(r => r.error)
@@ -949,21 +954,25 @@ export default function Caisse() {
             <p className="font-mono text-sm text-eiffel mb-6">{codeInconnu}</p>
             <p className="text-sm text-zinc-400 mb-6">
               Ce code-barres ne correspond à aucun produit du catalogue.
-              Voulez-vous l'ajouter maintenant ?
+              {peutCreerProduit
+                ? ' Voulez-vous l\'ajouter maintenant ?'
+                : ' Demandez à un manager de l\'ajouter.'}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setCodeInconnu(null)}
                 className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
               >
-                Ignorer
+                {peutCreerProduit ? 'Ignorer' : 'Fermer'}
               </button>
-              <button
-                onClick={() => setModalAjoutOuvert(true)}
-                className="flex-1 py-3 rounded-xl bg-eiffel text-yellow-950 text-sm font-semibold shadow-or"
-              >
-                Ajouter
-              </button>
+              {peutCreerProduit && (
+                <button
+                  onClick={() => setModalAjoutOuvert(true)}
+                  className="flex-1 py-3 rounded-xl bg-eiffel text-yellow-950 text-sm font-semibold shadow-or"
+                >
+                  Ajouter
+                </button>
+              )}
             </div>
           </div>
         </div>
