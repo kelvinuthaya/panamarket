@@ -35,7 +35,7 @@ export const Drawer = ({ open, onClose }) => {
 
       {/* Sheet droit */}
       <aside
-        className={`fixed top-0 right-0 bottom-0 z-50 w-72 max-w-[85vw] bg-bitume text-white shadow-2xl transition-transform duration-200 ease-out ${
+        className={`fixed top-0 right-0 bottom-0 z-50 w-72 max-w-[85vw] bg-bitume text-white transition-transform duration-200 ease-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{

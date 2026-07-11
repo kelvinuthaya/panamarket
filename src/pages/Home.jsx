@@ -28,7 +28,9 @@ export default function Home() {
     <div className="py-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-display font-bold text-2xl text-bitume leading-tight">
+        {/* Sur-titre tag-street : même convention de header que les autres pages */}
+        <p className="tag-street text-zinc-400">PANAM'ARKET · 75020</p>
+        <h1 className="font-display font-bold text-2xl text-bitume leading-tight mt-1">
           Bonjour {nom}
         </h1>
         <span className="inline-block mt-2 tag-street text-paname-700 bg-paname-700/10 px-2 py-0.5 rounded-full">
@@ -42,7 +44,7 @@ export default function Home() {
           <Link
             key={to}
             to={to}
-            className="bg-white border border-zinc-200 rounded-2xl p-5 flex flex-col items-center gap-3 hover:border-paname-700/40 hover:shadow-sm transition group"
+            className="bg-white border border-bitume/10 rounded-2xl p-5 flex flex-col items-center gap-3 hover:border-paname-700/40 md:hover:shadow-md transition group"
           >
             <Icon
               size={28}
