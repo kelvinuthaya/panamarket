@@ -2,7 +2,7 @@
   "name": "Panamarket",
   "short_name": "Panamarket",
   "description": "Gestion d'inventaire et d'approvisionnement — Panam'arket",
-  "start_url": "/ruptures",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#F9FAFB",
   "theme_color": "#1D9E75",
