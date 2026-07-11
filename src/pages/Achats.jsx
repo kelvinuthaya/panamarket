@@ -268,9 +268,15 @@ const Reception = ({
   validerAchats,
   validating,
 }) => {
+  const { role } = useAuth()
+  // La policy RLS produits_insert est réservée manager/gérant : on ne propose
+  // pas à l'employé un flux de création que la base refuserait de toute façon.
+  const peutCreerProduit = role === 'manager' || role === 'gerant'
+
   const [scannerOuvert, setScannerOuvert] = useState(false)
   const [offLoading, setOffLoading]       = useState(false)
   const [offMessage, setOffMessage]       = useState('')
+  const [messageScan, setMessageScan]     = useState('')
   const [modalCreation, setModalCreation] = useState(false)
   const [formCreation, setFormCreation]   = useState(FORM_CREATION_VIDE)
   const [savingCreation, setSavingCreation] = useState(false)
@@ -288,6 +294,7 @@ const Reception = ({
   async function handleScan(code) {
     const { data } = await supabase.from('produits').select('*').eq('code', code).single()
     if (data) {
+      setMessageScan('')
       // Produit trouvé : ajouter ou incrémenter qtRecue
       setReceptionItems(prev => {
         const idx = prev.findIndex(i => i.produit.id === data.id)
@@ -296,8 +303,11 @@ const Reception = ({
         }
         return [...prev, { produit: data, qtRecue: 1, dlc: '' }]
       })
+    } else if (!peutCreerProduit) {
+      setMessageScan(`Produit inconnu (${code}) — demandez à un manager de le créer.`)
     } else {
       // Produit inconnu : proposer création via Open Food Facts
+      setMessageScan('')
       setFormCreation({ ...FORM_CREATION_VIDE, code })
       setOffMessage('')
       setModalCreation(true)
@@ -403,6 +413,13 @@ const Reception = ({
         <ScanLine size={18} />
         {scannerOuvert ? 'FERMER LE SCANNER' : 'SCANNER UN PRODUIT REÇU'}
       </button>
+
+      {/* Produit inconnu scanné par un employé : pas de création possible (RLS) */}
+      {messageScan && (
+        <p className="font-mono text-[10px] text-orange-500 bg-orange-50 rounded-2xl px-3 py-2.5 mb-4">
+          {messageScan}
+        </p>
+      )}
 
       {/* Zone caméra ZXing */}
       {scannerOuvert && (

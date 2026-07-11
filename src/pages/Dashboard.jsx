@@ -212,6 +212,8 @@ export default function Dashboard() {
             produits:   t.produits,
             total:      parseFloat(t.total),
             paiement:   t.paiement === 'cb' || t.paiement === 'especes' ? t.paiement : 'cb',
+            // Obligatoire depuis la policy RLS transactions_insert (auth.uid() = user_id)
+            user_id:    user?.id,
           })
         }
       } catch {}
