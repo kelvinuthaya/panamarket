@@ -340,7 +340,7 @@ export default function Dashboard() {
 
   return (
     <div className="pb-20">
-      <div className="px-4 pt-4 max-w-5xl mx-auto space-y-5">
+      <div className="px-4 pt-4 max-w-5xl lg:max-w-6xl mx-auto space-y-5">
 
         {/* PAGE HEADER */}
         <div>
@@ -352,7 +352,7 @@ export default function Dashboard() {
         {!migrationFaite && role === 'gerant' && (
           <button
             onClick={migrerLocalStorage}
-            className="w-full bg-pavillon text-white py-3 rounded-xl tag-street shadow-rouge"
+            className="w-full bg-pavillon text-white h-14 rounded-xl tag-street shadow-rouge active:brightness-90 transition"
           >
             ⚠ MIGRER LES DONNÉES VERS SUPABASE (UNE SEULE FOIS)
           </button>
@@ -365,11 +365,11 @@ export default function Dashboard() {
               const d = new Date(yr, mo - 2, 1)
               setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
             }}
-            className="flex-1 py-2.5 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition hover:border-paname-700/30"
+            className="flex-1 h-12 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition active:border-paname-700/30"
           >
             ◀ {prevMoisLabel}
           </button>
-          <div className="flex-[2] py-2.5 bg-gradient-to-r from-paname-700 to-paname-500 text-white rounded-xl tag-street text-center shadow-paname">
+          <div className="flex-[2] h-12 flex items-center justify-center bg-gradient-to-r from-paname-700 to-paname-500 text-white rounded-xl tag-street text-center shadow-paname">
             {labelMoisAffiche.toUpperCase()}
           </div>
           <button
@@ -378,7 +378,7 @@ export default function Dashboard() {
               setMoisSelectionne(d.toLocaleDateString('en-CA').slice(0, 7))
             }}
             disabled={isCurrentMonth}
-            className="flex-1 py-2.5 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition hover:border-paname-700/30 disabled:opacity-30"
+            className="flex-1 h-12 bg-white border border-bitume/10 rounded-xl tag-street text-zinc-600 text-center transition active:border-paname-700/30 disabled:opacity-30"
           >
             {nextMoisLabel} ▶
           </button>
@@ -515,7 +515,7 @@ export default function Dashboard() {
                 />
                 <button
                   onClick={() => pdfRef.current.click()}
-                  className="w-full flex flex-col items-center gap-2 bg-paname-700/5 text-paname-700 border border-paname-700/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-700/10"
+                  className="w-full min-h-[64px] flex flex-col items-center justify-center gap-2 bg-paname-700/5 text-paname-700 border border-paname-700/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-700/10"
                 >
                   <FileText size={20} />
                   PDF TRANSACTIONS
@@ -537,7 +537,7 @@ export default function Dashboard() {
                 />
                 <button
                   onClick={() => csvRef.current.click()}
-                  className="w-full flex flex-col items-center gap-2 bg-paname-500/5 text-paname-500 border border-paname-500/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-500/10"
+                  className="w-full min-h-[64px] flex flex-col items-center justify-center gap-2 bg-paname-500/5 text-paname-500 border border-paname-500/20 rounded-xl px-3 py-4 tag-street transition active:bg-paname-500/10"
                 >
                   <FileSpreadsheet size={20} />
                   CSV CA
@@ -572,7 +572,7 @@ export default function Dashboard() {
         {/* ACCÈS RAPIDE CATALOGUE */}
         <Link
           to="/catalogue"
-          className="flex items-center justify-between bg-white rounded-2xl border border-bitume/5 px-4 py-3 hover:border-paname-700/30 transition-colors"
+          className="flex items-center justify-between bg-white rounded-2xl border border-bitume/5 px-4 min-h-[56px] py-3 active:border-paname-700/30 transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-paname-700/10 flex items-center justify-center">
@@ -603,7 +603,7 @@ export default function Dashboard() {
                 </p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={donneesGraphique} barSize={12}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis
@@ -687,7 +687,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl border border-bitume/5 p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="tag-street text-zinc-400">ÉTAT DES STOCKS</p>
-              <Link to="/catalogue" className="tag-street text-paname-700">
+              <Link to="/catalogue" className="tag-street text-paname-700 min-h-[44px] flex items-center px-2 -mr-2">
                 VOIR TOUT →
               </Link>
             </div>
