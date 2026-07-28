@@ -141,6 +141,93 @@ function LignePanier({ p, qte, mode, onChanger }) {
   )
 }
 
+// ── Tuile produit (mode POS lg: — tap = +1 au panier) ──────────────────────
+// Toute la tuile est la cible de tap (geste caisse standard) ; le décrément
+// se fait uniquement via le stepper de la colonne ticket. Étoile favori en
+// coin avec stopPropagation pour ne pas déclencher l'ajout au panier.
+function CarteProduitPos({ p, qte, mode, onAdd, estFavori, onToggleFavori }) {
+  const prix = prixApplique(p, mode)
+  const statut     = getStatut(p)
+  const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
+  return (
+    <button
+      onClick={onAdd}
+      className={`relative text-left bg-bitume-2 rounded-xl border px-3 py-3 transition select-none active:scale-[0.97] ${
+        qte > 0 ? 'border-eiffel/50' : 'border-white/5'
+      }`}
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleFavori(p.id) }}
+        className={`absolute top-1 right-1 w-9 h-9 flex items-center justify-center text-base transition-colors ${
+          estFavori ? 'text-eiffel' : 'text-white/20 active:text-white/40'
+        }`}
+        title={estFavori ? 'Retirer des favoris' : 'Épingler'}
+      >
+        {estFavori ? '★' : '☆'}
+      </button>
+      {qte > 0 && (
+        <span className="absolute top-1.5 left-1.5 bg-eiffel text-yellow-950 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center tabular">
+          {qte}
+        </span>
+      )}
+      <p className="text-sm font-medium text-white line-clamp-2 mt-1.5 pr-6 min-h-[2.5rem]">
+        {p.designation}
+      </p>
+      <p className="font-mono text-xs text-zinc-400 mt-1">
+        {prix.toFixed(2)} €
+      </p>
+      <p className={`font-mono text-[10px] mt-0.5 ${stockColor}`}>
+        Stock : {p.st_actuel}
+      </p>
+    </button>
+  )
+}
+
+// ── Ligne panier (colonne ticket, mode POS lg:) — steppers 48px ────────────
+function LignePanierPos({ p, qte, mode, onChanger }) {
+  const prix = prixApplique(p, mode)
+  return (
+    <div className="bg-bitume-3 rounded-xl p-2.5 border border-white/5 flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <p className="font-display font-bold text-sm text-white truncate">{p.designation}</p>
+        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">{prix.toFixed(2)} €/u</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          onClick={() => onChanger(-1)}
+          className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center active:bg-white/10"
+          aria-label="Retirer un"
+        >
+          <Minus size={16} />
+        </button>
+        <span className="font-display tabular text-base font-bold w-6 text-center text-white">
+          {qte}
+        </span>
+        <button
+          onClick={() => onChanger(+1)}
+          className="w-12 h-12 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 text-white flex items-center justify-center"
+          aria-label="Ajouter un"
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Onglet de gamme (mode POS lg:) — remplace l'accordéon mobile par des
+// tabs horizontales : plus adapté à un écran large et court (768px de haut).
+const TabGammePos = ({ active, onClick, children }) => (
+  <button
+    onClick={onClick}
+    className={`shrink-0 h-11 px-4 rounded-xl tag-street whitespace-nowrap transition select-none ${
+      active ? 'bg-paname-700 text-white' : 'bg-white/5 text-zinc-300 active:bg-white/10'
+    }`}
+  >
+    {children}
+  </button>
+)
+
 // ── Section dépliable par catégorie — version dark ─────────────────────────
 function SectionCategorie({ titre, variant = 'default', produits, ouverte, onToggle, renderCarte }) {
   const headerCls =
@@ -204,6 +291,9 @@ export default function Caisse() {
 
   // Sections dépliées — les gammes s'ajoutent automatiquement au premier chargement
   const [sectionOuvertes, setSectionOuvertes] = useState(() => new Set(['favoris']))
+
+  // Onglet actif (mode POS lg: uniquement) — tabs plutôt qu'accordéon
+  const [ongletGamme, setOngletGamme] = useState('favoris')
 
   // Scanner
   const [scannerOuvert, setScannerOuvert] = useState(false)
@@ -389,6 +479,23 @@ export default function Caisse() {
     const recu = parseFloat(montantRecu)
     return !isNaN(recu) && recu >= totalPanier ? (recu - totalPanier).toFixed(2) : null
   }, [montantRecu, totalPanier])
+
+  // ── Onglet gamme (mode POS lg:) ──────────────────────────────────────────
+  // Fallback dérivé plutôt qu'un effet de synchronisation : si l'onglet
+  // mémorisé n'existe plus (favoris vidés, gamme absente du catalogue chargé),
+  // on retombe sur le premier onglet disponible sans state supplémentaire.
+  const ongletsDisponibles = useMemo(
+    () => [...(favoris.size > 0 ? ['favoris'] : []), ...gammes],
+    [favoris, gammes]
+  )
+  const ongletActif = ongletsDisponibles.includes(ongletGamme)
+    ? ongletGamme
+    : (ongletsDisponibles[0] ?? null)
+
+  const produitsOnglet = useMemo(() => {
+    if (ongletActif === 'favoris') return produits.filter(p => favoris.has(p.id))
+    return produits.filter(p => (p.gamme || 'Autre') === ongletActif)
+  }, [produits, favoris, ongletActif])
 
   // ── Favoris ────────────────────────────────────────────────────────────────
   function toggleFavori(id) {
@@ -586,6 +693,19 @@ export default function Caisse() {
     />
   )
 
+  // ── Idem, tuile POS (mode lg:, tap = +1) ────────────────────────────────
+  const renderCartePos = (p) => (
+    <CarteProduitPos
+      key={p.id}
+      p={p}
+      qte={panier[p.id] ?? 0}
+      mode={modePaiement}
+      onAdd={() => changer(p.id, +1)}
+      estFavori={favoris.has(p.id)}
+      onToggleFavori={toggleFavori}
+    />
+  )
+
   // ── Guard ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -599,7 +719,8 @@ export default function Caisse() {
 
   return (
     // Route full-bleed (cf. AppShell FULL_BLEED_ROUTES) : pas de padding à contourner
-    <div className="bg-bitume text-white min-h-[100dvh]">
+    // lg: = mode POS, hauteur fixe + pas de scroll de page (scroll interne aux 2 colonnes)
+    <div className="bg-bitume text-white min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden">
 
       {/* ── TOAST ─────────────────────────────────────────────────────────────── */}
       {toast && (
@@ -608,8 +729,9 @@ export default function Caisse() {
         </div>
       )}
 
+      {/* ══════════════════════════ MOBILE / RAYON (<lg) ══════════════════════════ */}
       {/* Padding intérieur — pb-[280px] réserve l'espace pour le footer sticky */}
-      <div className="px-4 pt-4 md:pt-6 pb-[280px]">
+      <div className="lg:hidden px-4 pt-4 pb-[280px]">
 
         {/* ── HEADER : mode + horloge + RÉCAP ─────────────────────────────────── */}
         <header className="flex items-center justify-between mb-5">
@@ -740,11 +862,10 @@ export default function Caisse() {
         )}
       </div>
 
-      {/* ── FOOTER STICKY ────────────────────────────────────────────────────────
-          fixed + bottom calc(64px + safe-area) pour passer au-dessus de la BottomNav.
-          lg:!bottom-0 force bottom=0 en mode POS (pas de BottomNav, !important bat le inline style). */}
+      {/* ── FOOTER STICKY (mobile/rayon <lg) ────────────────────────────────────
+          fixed + bottom calc(64px + safe-area) pour passer au-dessus de la BottomNav. */}
       <div
-        className="fixed left-0 right-0 lg:left-[88px] lg:!bottom-0 z-30 bg-bitume-2 border-t-2 border-eiffel px-4 pt-3 pb-3"
+        className="lg:hidden fixed left-0 right-0 z-30 bg-bitume-2 border-t-2 border-eiffel px-4 pt-3 pb-3"
         style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
       >
         {/* Total */}
@@ -821,14 +942,194 @@ export default function Caisse() {
         </button>
       </div>
 
-      {/* ── OVERLAY RÉCAP (bottom sheet dark) ───────────────────────────────── */}
+      {/* ══════════════════════════ MODE POS (lg:) — 2 colonnes ══════════════════════════
+          Gauche : grille produits (tap = +1). Droite : ticket + actions, toujours
+          visibles (pas d'overlay panier). Même state/logique que le mode mobile. */}
+      <div className="hidden lg:flex h-full">
+
+        {/* ── Colonne gauche : produits ─────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 h-full">
+          <div className="flex gap-2 p-4 shrink-0">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Rechercher un produit…"
+                value={recherche}
+                onChange={e => setRecherche(e.target.value)}
+                className="w-full h-12 pl-10 pr-3 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-500 outline-none focus:border-paname-500 transition-colors"
+              />
+            </div>
+            <button
+              onClick={() => setScannerOuvert(o => !o)}
+              className="w-12 h-12 rounded-2xl bg-gradient-to-br from-paname-700 to-paname-500 shadow-paname text-white flex items-center justify-center shrink-0 active:scale-95 transition"
+              aria-label={scannerOuvert ? 'Fermer le scanner' : 'Scanner un produit'}
+            >
+              {scannerOuvert ? <X size={20} /> : <ScanLine size={20} />}
+            </button>
+          </div>
+
+          {scannerOuvert && (
+            <div className="mx-4 mb-3 max-w-md rounded-2xl overflow-hidden border border-white/10 bg-black shrink-0">
+              <video ref={videoRef} className="w-full" playsInline muted />
+              <p className="text-center font-mono text-[10px] text-zinc-400 py-2 bg-bitume-2 border-t border-white/10">
+                Pointez la douchette ou la caméra vers le code-barres
+              </p>
+            </div>
+          )}
+
+          {/* Tabs de gammes — masquées en mode recherche (résultats à plat, comme mobile) */}
+          {!rechercheActive && (
+            <div className="flex gap-2 px-4 pb-3 overflow-x-auto pos-scroll shrink-0">
+              {ongletsDisponibles.map(o => (
+                <TabGammePos key={o} active={o === ongletActif} onClick={() => setOngletGamme(o)}>
+                  {o === 'favoris' ? '★ FAVORIS' : o.toUpperCase()}
+                </TabGammePos>
+              ))}
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto pos-scroll px-4 pb-4">
+            {rechercheActive ? (
+              produitsFiltrés.length === 0 ? (
+                <p className="text-center text-zinc-500 mt-8 text-sm">Aucun produit trouvé.</p>
+              ) : (
+                <div className="grid grid-cols-4 gap-3">
+                  {produitsFiltrés.map(renderCartePos)}
+                </div>
+              )
+            ) : produitsOnglet.length === 0 ? (
+              <p className="text-center text-zinc-500 mt-8 text-sm">Aucun produit dans cet onglet.</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-3">
+                {produitsOnglet.map(renderCartePos)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Colonne droite : ticket (toujours visible, sous le pouce) ────── */}
+        <div className="w-[380px] shrink-0 h-full flex flex-col border-l border-white/10 bg-bitume-2">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+            <div>
+              <p className="tag-street text-eiffel">CAISSE · {getMode()}</p>
+              <p className="font-display text-xl font-bold text-white tabular leading-none mt-0.5">
+                {horloge}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowRecap(true)}
+              className="relative bg-eiffel text-yellow-950 w-11 h-11 rounded-xl flex items-center justify-center shadow-or active:scale-95 transition"
+              aria-label="Récap du jour"
+            >
+              📊
+              {transactions.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-yellow-950 text-eiffel text-[10px] rounded-full w-5 h-5 flex items-center justify-center tabular">
+                  {transactions.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pos-scroll px-3 py-3 space-y-2">
+            {articlesEnPanier.length === 0 ? (
+              <p className="text-center text-zinc-500 text-sm py-10">
+                Panier vide — touchez un produit
+              </p>
+            ) : (
+              articlesEnPanier.map(p => (
+                <LignePanierPos
+                  key={p.id}
+                  p={p}
+                  qte={panier[p.id]}
+                  mode={modePaiement}
+                  onChanger={(delta) => changer(p.id, delta)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Bloc actions — toujours sous le pouce, pas de scroll possible */}
+          <div className="shrink-0 border-t-2 border-eiffel px-4 pt-3 pb-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <span className="tag-street text-zinc-500">TOTAL</span>
+              <span className="font-display text-4xl font-bold tabular text-white leading-none">
+                {totalPanier.toFixed(2)}
+                <span className="text-eiffel ml-1">€</span>
+              </span>
+            </div>
+
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => setModePaiement('cb')}
+                className={`flex-1 h-12 rounded-xl tag-street transition ${
+                  modePaiement === 'cb'
+                    ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                    : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+                }`}
+              >
+                💳 CB
+              </button>
+              <button
+                onClick={() => setModePaiement('especes')}
+                className={`flex-1 h-12 rounded-xl tag-street transition ${
+                  modePaiement === 'especes'
+                    ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                    : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+                }`}
+              >
+                💵 ESPÈCES
+              </button>
+            </div>
+
+            {modePaiement === 'especes' && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-mono text-[10px] text-zinc-400 shrink-0">REÇU</span>
+                <input
+                  type="number"
+                  min={totalPanier}
+                  step="0.01"
+                  value={montantRecu}
+                  onChange={e => setMontantRecu(e.target.value)}
+                  placeholder={totalPanier.toFixed(2)}
+                  className="flex-1 h-11 px-3 bg-white/5 border border-white/10 rounded-xl text-white text-right outline-none focus:border-paname-500 placeholder:text-zinc-500 tabular"
+                />
+                {monnaie !== null && (
+                  <div className="text-right shrink-0">
+                    <p className="font-mono text-[10px] text-zinc-400 leading-none">MONNAIE</p>
+                    <p className="text-sm font-bold text-eiffel tabular">{monnaie} €</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={validerVente}
+              disabled={articlesEnPanier.length === 0}
+              className="w-full h-16 rounded-2xl bg-eiffel text-yellow-950 font-bold tag-street text-base shadow-or disabled:opacity-30 active:scale-[0.98] transition"
+            >
+              VALIDER LA VENTE →
+            </button>
+
+            <button
+              onClick={() => setShowConfirmVider(true)}
+              disabled={articlesEnPanier.length === 0}
+              className="w-full mt-1.5 h-10 rounded-xl border border-pavillon/40 text-pavillon font-medium text-xs disabled:opacity-30 active:bg-pavillon/10 transition"
+            >
+              Vider le panier
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── OVERLAY RÉCAP (bottom sheet mobile / modal centré lg:) ─────────── */}
       {showRecap && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 flex items-end"
+          className="fixed inset-0 z-50 bg-black/60 flex items-end lg:items-center lg:justify-center"
           onClick={e => { if (e.target === e.currentTarget) setShowRecap(false) }}
         >
           <div
-            className="bg-bitume-2 w-full max-h-[85vh] rounded-t-3xl flex flex-col border-t-2 border-eiffel lg:ml-[88px]"
+            className="bg-bitume-2 w-full max-h-[85vh] rounded-t-3xl flex flex-col border-t-2 border-eiffel lg:max-w-lg lg:rounded-3xl lg:border-2 lg:max-h-[80vh]"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">

@@ -48,6 +48,20 @@
     animation: pageFadeIn 220ms ease-out both;
   }
 
+  /* Compense la BottomNav (mobile/rayon) au bas du <main> d'AppShell.
+     En mode POS (lg:), la BottomNav ne s'affiche plus (lg:hidden) : réserver
+     cet espace y créerait une bande morte inutile en bas d'un écran déjà
+     court (768px de haut). env() en CSS pur, pas en classe Tailwind
+     arbitraire — cf. note de BottomNav.jsx sur le risque de purge en build. */
+  .pb-mobile-nav {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 1024px) {
+    .pb-mobile-nav {
+      padding-bottom: 0;
+    }
+  }
+
   /* Scrollbar fine pour les zones de contenu scrollables du mode caisse
      (grille produits, ticket, listes) — la scrollbar Windows par défaut
      est large et visuellement lourde sur un écran tactile paysage. */

@@ -45,10 +45,7 @@ export const AppShell = ({ children, title: titleOverride }) => {
       <TopBar title={title} onMenuClick={() => setDrawerOpen(true)} />
 
       {/* Contenu — décalé de 88px en lg: pour ne pas passer sous le rail */}
-      <main
-        className="lg:ml-[88px] page-fade"
-        style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}
-      >
+      <main className="lg:ml-[88px] page-fade pb-mobile-nav">
         {fullBleed ? children : (
           <div className="max-w-5xl mx-auto px-4 pt-4 lg:pt-6">
             {children}
