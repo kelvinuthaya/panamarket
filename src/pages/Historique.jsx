@@ -59,13 +59,31 @@ function contexteDePeriode(periode, jourRef) {
   }
 }
 
+// Helpers d'affichage des livraisons — recréés à l'identique depuis Achats.jsx
+// (non exportés là-bas, cf. consigne : pas de modification de ce fichier).
+function formaterDateLivraison(isoString) {
+  const d = new Date(isoString)
+  const datePart = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${datePart} à ${h}h${m}`
+}
+
+function formaterDlc(iso) {
+  const [aaaa, mm, jj] = iso.split('-')
+  return `${jj}/${mm}/${aaaa}`
+}
+
 export default function Historique() {
   const { role } = useAuth()
   const [jour, setJour]                 = useState(() => jourCommercial())
   const [periode, setPeriode]           = useState('jour') // jour | semaine | mois | annee
+  const [vue, setVue]                   = useState('ventes') // ventes | livraisons
   const [transactions, setTransactions] = useState([])
   const [gammeParId, setGammeParId]     = useState({})
   const [loading, setLoading]           = useState(false)
+  const [livraisons, setLivraisons]     = useState([])
+  const [loadingLivraisons, setLoadingLivraisons] = useState(false)
   const estGerant = role === 'gerant'
 
   // ── Chargement de l'index gamme par produit (une seule fois) ──────────────
@@ -119,6 +137,27 @@ export default function Historique() {
     load()
     return () => { cancelled = true }
   }, [ctx, estGerant])
+
+  // ── Chargement des livraisons de la période (uniquement en vue "livraisons") ──
+  useEffect(() => {
+    if (!estGerant || vue !== 'livraisons') return
+    let cancelled = false
+    async function load() {
+      setLoadingLivraisons(true)
+      const { data, error } = await supabase
+        .from('livraisons')
+        .select('*, stock_dlc(*)')
+        .gte('created_at', ctx.debut.toISOString())
+        .lt('created_at', ctx.fin.toISOString())
+        .order('created_at', { ascending: false })
+
+      if (cancelled) return
+      setLivraisons(error || !data ? [] : data)
+      setLoadingLivraisons(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [ctx, estGerant, vue])
 
   // ── Computed ───────────────────────────────────────────────────────────────
   const caJour = useMemo(
@@ -180,6 +219,12 @@ export default function Historique() {
     { id: 'annee',   label: 'ANNÉE'   },
   ]
 
+  // ── Toggle ventes / livraisons — même style pills ──────────────────────────
+  const VUES = [
+    { id: 'ventes',     label: 'VENTES'     },
+    { id: 'livraisons', label: 'LIVRAISONS' },
+  ]
+
   // ── Helpers de rendu — partagés entre le bloc mobile et le bloc POS (lg:)
   // pour ne pas dupliquer le JSX des listes (contenu en lecture seule,
   // aucune cible tactile à y ajuster).
@@ -232,6 +277,44 @@ export default function Historique() {
     </div>
   )
 
+  const renderLivraison = (livraison) => {
+    const lignes = livraison.stock_dlc ?? []
+    const nbProduits = lignes.length
+    return (
+      <div key={livraison.id} className="bg-bitume-3 rounded-2xl border border-white/5 overflow-hidden">
+        <div className="px-4 py-3 border-b border-white/5">
+          <p className="font-display font-bold text-sm text-white">
+            {formaterDateLivraison(livraison.created_at)}
+          </p>
+          <p className="font-mono text-[10px] text-zinc-400 mt-0.5">
+            {nbProduits} produit{nbProduits !== 1 ? 's' : ''} reçu{nbProduits !== 1 ? 's' : ''}
+          </p>
+        </div>
+        {lignes.length === 0 ? (
+          <p className="font-mono text-[10px] text-zinc-400 italic px-4 py-3">
+            Aucun produit avec DLC enregistré
+          </p>
+        ) : (
+          lignes.map(ligne => (
+            <div key={ligne.id} className="flex items-center justify-between px-4 py-2 text-xs text-zinc-400 border-t border-white/5">
+              <span className="flex-1 truncate mr-2">{ligne.designation}</span>
+              <div className="flex items-center gap-3 shrink-0">
+                {ligne.dlc && (
+                  <span className="font-mono text-[10px] text-zinc-500">
+                    DLC {formaterDlc(ligne.dlc)}
+                  </span>
+                )}
+                <span className="font-mono text-[10px] font-bold text-paname-400 tabular">
+                  ×{ligne.quantite}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    )
+  }
+
   // ── Rendu ──────────────────────────────────────────────────────────────────
   return (
     <div className="bg-bitume text-white min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden">
@@ -264,6 +347,23 @@ export default function Historique() {
           ))}
         </div>
 
+        {/* ── TOGGLE VENTES / LIVRAISONS ────────────────────────────────── */}
+        <div className="mb-3 grid grid-cols-2 gap-1.5">
+          {VUES.map(v => (
+            <button
+              key={v.id}
+              onClick={() => setVue(v.id)}
+              className={`h-12 rounded-xl tag-street text-[10px] transition ${
+                vue === v.id
+                  ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                  : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
         {/* ── SÉLECTEUR DE DATE ─────────────────────────────────────────── */}
         <div className="mb-5 bg-bitume-2 border border-white/5 rounded-2xl p-3 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-eiffel/15 flex items-center justify-center shrink-0">
@@ -284,79 +384,109 @@ export default function Historique() {
           </div>
         </div>
 
-        {/* ── ÉTAT DE CHARGEMENT ─────────────────────────────────────────── */}
-        {loading && (
-          <p className="text-center text-eiffel py-12 tag-street">
-            CHARGEMENT…
-          </p>
-        )}
-
-        {/* ── AUCUNE VENTE ────────────────────────────────────────────────── */}
-        {!loading && transactions.length === 0 && (
-          <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
-            <p className="tag-street text-zinc-500">
-              AUCUNE VENTE ENREGISTRÉE POUR CETTE PÉRIODE
-            </p>
-          </div>
-        )}
-
-        {/* ── AFFICHAGE JOUR : détail des ventes ─────────────────────────── */}
-        {!loading && transactions.length > 0 && !estPeriodeLongue && (
-          <div className="space-y-3 mb-3">
-            {transactions.map(renderVenteJour)}
-          </div>
-        )}
-
-        {/* ── AFFICHAGE PÉRIODE LONGUE : synthèse uniquement ─────────────── */}
-        {!loading && transactions.length > 0 && estPeriodeLongue && (
+        {vue === 'ventes' && (
           <>
-            {/* Carte stats : CA + nombre de ventes + total articles */}
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">VENTES</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {transactions.length}
-                </p>
-              </div>
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">ARTICLES</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {totalQuantites(agregats)}
-                </p>
-              </div>
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">PANIER MOY.</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {(caJour / transactions.length).toFixed(2)}<span className="text-eiffel ml-0.5 text-xs">€</span>
-                </p>
-              </div>
-            </div>
+            {/* ── ÉTAT DE CHARGEMENT ─────────────────────────────────────── */}
+            {loading && (
+              <p className="text-center text-eiffel py-12 tag-street">
+                CHARGEMENT…
+              </p>
+            )}
 
-            {/* Récap quantités par gamme */}
-            <div className="space-y-2 mb-3">
-              {agregats.map(renderGroupeGamme)}
-            </div>
+            {/* ── AUCUNE VENTE ────────────────────────────────────────────── */}
+            {!loading && transactions.length === 0 && (
+              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
+                <p className="tag-street text-zinc-500">
+                  AUCUNE VENTE ENREGISTRÉE POUR CETTE PÉRIODE
+                </p>
+              </div>
+            )}
+
+            {/* ── AFFICHAGE JOUR : détail des ventes ───────────────────────── */}
+            {!loading && transactions.length > 0 && !estPeriodeLongue && (
+              <div className="space-y-3 mb-3">
+                {transactions.map(renderVenteJour)}
+              </div>
+            )}
+
+            {/* ── AFFICHAGE PÉRIODE LONGUE : synthèse uniquement ───────────── */}
+            {!loading && transactions.length > 0 && estPeriodeLongue && (
+              <>
+                {/* Carte stats : CA + nombre de ventes + total articles */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">VENTES</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {transactions.length}
+                    </p>
+                  </div>
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">ARTICLES</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {totalQuantites(agregats)}
+                    </p>
+                  </div>
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">PANIER MOY.</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {(caJour / transactions.length).toFixed(2)}<span className="text-eiffel ml-0.5 text-xs">€</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Récap quantités par gamme */}
+                <div className="space-y-2 mb-3">
+                  {agregats.map(renderGroupeGamme)}
+                </div>
+              </>
+            )}
+
+            {/* ── CA bandeau gradient paname (commun à toutes les périodes) ─ */}
+            {!loading && transactions.length > 0 && (
+              <div className="bg-gradient-to-r from-paname-700 to-paname-500 rounded-2xl px-4 py-4 flex justify-between items-center shadow-paname mb-4">
+                <span className="tag-street text-white/80">
+                  CA {estPeriodeLongue ? 'DE LA PÉRIODE' : 'DE LA JOURNÉE'}
+                </span>
+                <span className="font-display text-3xl font-bold tabular text-white">
+                  {caJour.toFixed(2)}
+                  <span className="text-eiffel ml-1">€</span>
+                </span>
+              </div>
+            )}
           </>
         )}
 
-        {/* ── CA bandeau gradient paname (commun à toutes les périodes) ──── */}
-        {!loading && transactions.length > 0 && (
-          <div className="bg-gradient-to-r from-paname-700 to-paname-500 rounded-2xl px-4 py-4 flex justify-between items-center shadow-paname mb-4">
-            <span className="tag-street text-white/80">
-              CA {estPeriodeLongue ? 'DE LA PÉRIODE' : 'DE LA JOURNÉE'}
-            </span>
-            <span className="font-display text-3xl font-bold tabular text-white">
-              {caJour.toFixed(2)}
-              <span className="text-eiffel ml-1">€</span>
-            </span>
-          </div>
+        {vue === 'livraisons' && (
+          <>
+            {/* ── ÉTAT DE CHARGEMENT ─────────────────────────────────────── */}
+            {loadingLivraisons && (
+              <p className="text-center text-eiffel py-12 tag-street">
+                CHARGEMENT…
+              </p>
+            )}
+
+            {/* ── AUCUNE LIVRAISON ──────────────────────────────────────────── */}
+            {!loadingLivraisons && livraisons.length === 0 && (
+              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
+                <p className="tag-street text-zinc-500">
+                  AUCUNE LIVRAISON SUR CETTE PÉRIODE
+                </p>
+              </div>
+            )}
+
+            {!loadingLivraisons && livraisons.length > 0 && (
+              <div className="space-y-3 mb-3">
+                {livraisons.map(renderLivraison)}
+              </div>
+            )}
+          </>
         )}
 
-        {/* ── BOUTONS EXPORT ──────────────────────────────────────────────── */}
+        {/* ── BOUTONS EXPORT (ventes uniquement) ────────────────────────── */}
         <div className="space-y-2 mt-2">
           <button
             onClick={exporterTicket80}
-            disabled={transactions.length === 0}
+            disabled={vue === 'livraisons' || transactions.length === 0}
             className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-14 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
           >
             <Printer size={18} />
@@ -364,7 +494,7 @@ export default function Historique() {
           </button>
           <button
             onClick={exporterPdfA4}
-            disabled={transactions.length === 0}
+            disabled={vue === 'livraisons' || transactions.length === 0}
             className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-14 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
           >
             <FileText size={18} />
@@ -403,6 +533,22 @@ export default function Historique() {
             ))}
           </div>
 
+          <div className="mb-3 grid grid-cols-2 gap-1.5">
+            {VUES.map(v => (
+              <button
+                key={v.id}
+                onClick={() => setVue(v.id)}
+                className={`h-12 rounded-xl tag-street text-[10px] transition ${
+                  vue === v.id
+                    ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
+                    : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
           <div className="mb-5 bg-bitume-2 border border-white/5 rounded-2xl p-3 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-eiffel/15 flex items-center justify-center shrink-0">
               <CalendarClock size={18} className="text-eiffel" />
@@ -422,45 +568,49 @@ export default function Historique() {
             </div>
           </div>
 
-          {!loading && transactions.length > 0 && estPeriodeLongue && (
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">VENTES</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {transactions.length}
-                </p>
-              </div>
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">ARTICLES</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {totalQuantites(agregats)}
-                </p>
-              </div>
-              <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
-                <p className="tag-street text-zinc-500 text-[9px]">PANIER MOY.</p>
-                <p className="font-display tabular text-xl font-bold text-white mt-1">
-                  {(caJour / transactions.length).toFixed(2)}<span className="text-eiffel ml-0.5 text-xs">€</span>
-                </p>
-              </div>
-            </div>
-          )}
+          {vue === 'ventes' && (
+            <>
+              {!loading && transactions.length > 0 && estPeriodeLongue && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">VENTES</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {transactions.length}
+                    </p>
+                  </div>
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">ARTICLES</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {totalQuantites(agregats)}
+                    </p>
+                  </div>
+                  <div className="bg-bitume-2 border border-white/5 rounded-2xl px-3 py-3">
+                    <p className="tag-street text-zinc-500 text-[9px]">PANIER MOY.</p>
+                    <p className="font-display tabular text-xl font-bold text-white mt-1">
+                      {(caJour / transactions.length).toFixed(2)}<span className="text-eiffel ml-0.5 text-xs">€</span>
+                    </p>
+                  </div>
+                </div>
+              )}
 
-          {!loading && transactions.length > 0 && (
-            <div className="bg-gradient-to-r from-paname-700 to-paname-500 rounded-2xl px-4 py-4 flex justify-between items-center shadow-paname mb-4">
-              <span className="tag-street text-white/80">
-                CA {estPeriodeLongue ? 'DE LA PÉRIODE' : 'DE LA JOURNÉE'}
-              </span>
-              <span className="font-display text-2xl font-bold tabular text-white">
-                {caJour.toFixed(2)}
-                <span className="text-eiffel ml-1">€</span>
-              </span>
-            </div>
+              {!loading && transactions.length > 0 && (
+                <div className="bg-gradient-to-r from-paname-700 to-paname-500 rounded-2xl px-4 py-4 flex justify-between items-center shadow-paname mb-4">
+                  <span className="tag-street text-white/80">
+                    CA {estPeriodeLongue ? 'DE LA PÉRIODE' : 'DE LA JOURNÉE'}
+                  </span>
+                  <span className="font-display text-2xl font-bold tabular text-white">
+                    {caJour.toFixed(2)}
+                    <span className="text-eiffel ml-1">€</span>
+                  </span>
+                </div>
+              )}
+            </>
           )}
 
           <div className="space-y-2">
             <button
               onClick={exporterTicket80}
-              disabled={transactions.length === 0}
+              disabled={vue === 'livraisons' || transactions.length === 0}
               className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-14 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
             >
               <Printer size={18} />
@@ -468,7 +618,7 @@ export default function Historique() {
             </button>
             <button
               onClick={exporterPdfA4}
-              disabled={transactions.length === 0}
+              disabled={vue === 'livraisons' || transactions.length === 0}
               className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-14 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
             >
               <FileText size={18} />
@@ -479,25 +629,49 @@ export default function Historique() {
 
         {/* ── Colonne droite : liste (scroll interne) ───────────────────── */}
         <div className="flex-1 h-full overflow-y-auto pos-scroll px-6 py-6">
-          {loading && (
-            <p className="text-center text-eiffel py-12 tag-street">CHARGEMENT…</p>
+          {vue === 'ventes' && (
+            <>
+              {loading && (
+                <p className="text-center text-eiffel py-12 tag-street">CHARGEMENT…</p>
+              )}
+              {!loading && transactions.length === 0 && (
+                <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
+                  <p className="tag-street text-zinc-500">
+                    AUCUNE VENTE ENREGISTRÉE POUR CETTE PÉRIODE
+                  </p>
+                </div>
+              )}
+              {!loading && transactions.length > 0 && !estPeriodeLongue && (
+                <div className="space-y-3">
+                  {transactions.map(renderVenteJour)}
+                </div>
+              )}
+              {!loading && transactions.length > 0 && estPeriodeLongue && (
+                <div className="space-y-2">
+                  {agregats.map(renderGroupeGamme)}
+                </div>
+              )}
+            </>
           )}
-          {!loading && transactions.length === 0 && (
-            <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
-              <p className="tag-street text-zinc-500">
-                AUCUNE VENTE ENREGISTRÉE POUR CETTE PÉRIODE
-              </p>
-            </div>
-          )}
-          {!loading && transactions.length > 0 && !estPeriodeLongue && (
-            <div className="space-y-3">
-              {transactions.map(renderVenteJour)}
-            </div>
-          )}
-          {!loading && transactions.length > 0 && estPeriodeLongue && (
-            <div className="space-y-2">
-              {agregats.map(renderGroupeGamme)}
-            </div>
+
+          {vue === 'livraisons' && (
+            <>
+              {loadingLivraisons && (
+                <p className="text-center text-eiffel py-12 tag-street">CHARGEMENT…</p>
+              )}
+              {!loadingLivraisons && livraisons.length === 0 && (
+                <div className="bg-bitume-2 border border-white/5 rounded-2xl px-4 py-10 text-center">
+                  <p className="tag-street text-zinc-500">
+                    AUCUNE LIVRAISON SUR CETTE PÉRIODE
+                  </p>
+                </div>
+              )}
+              {!loadingLivraisons && livraisons.length > 0 && (
+                <div className="space-y-3">
+                  {livraisons.map(renderLivraison)}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
