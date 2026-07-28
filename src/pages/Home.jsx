@@ -38,18 +38,18 @@ export default function Home() {
         </span>
       </div>
 
-      {/* Grille de tuiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Grille de tuiles — écran d'accueil au boot de la caisse (lg:) */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         {tiles.map(({ to, label, Icon }) => (
           <Link
             key={to}
             to={to}
-            className="bg-white border border-bitume/10 rounded-2xl p-5 flex flex-col items-center gap-3 hover:border-paname-700/40 md:hover:shadow-md transition group"
+            className="bg-white border border-bitume/10 rounded-2xl p-5 lg:min-h-[160px] flex flex-col items-center justify-center gap-3 hover:border-paname-700/40 active:border-paname-700/40 active:bg-paname-700/5 transition select-none group"
           >
             <Icon
-              size={28}
+              size={32}
               strokeWidth={1.6}
-              className="text-paname-700 group-hover:scale-105 transition-transform"
+              className="text-paname-700 group-active:scale-105 transition-transform"
             />
             <span className="text-sm font-medium text-bitume">{label}</span>
           </Link>

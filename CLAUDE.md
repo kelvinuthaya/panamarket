@@ -63,7 +63,7 @@ src/
 ├── components/
 │   ├── ProduitFormModal.jsx  # Création/édition produit (scan + Open Food Facts)
 │   ├── ui/                   # Card, Badge, StatusDot, Button, Tag
-│   └── layout/               # AppShell, Sidebar (desktop), BottomNav (mobile), TopBar, Drawer
+│   └── layout/               # AppShell, Sidebar (= NavRail 88px, mode POS lg:), BottomNav/TopBar (<lg), Drawer
 └── pages/
     ├── Home.jsx              # Accueil, tuiles selon rôle
     ├── Login.jsx             # Auth Supabase
@@ -190,10 +190,34 @@ Deux ambiances coexistent :
   `paname` (vert gradient), `pavillon` (rouge), `signal` (vert), typo `tag-street`.
 
 - Statuts : vert = ok, orange/eiffel = stock faible, rouge/pavillon = rupture
-- Mobile-first : utilisation à une main en rayon ; BottomNav mobile, Sidebar desktop
 - Toasts : sonner (Catalogue, Dashboard, ProduitFormModal) ; Caisse et Achats ont un
   toast local useState — NE PAS importer `toast` de sonner dans ces deux fichiers
   (collision de nom avec le useState local déjà vécue)
+
+### Mode POS tactile paysage (prioritaire) vs mobile/rayon
+
+Le poste principal est la caisse physique : écran tactile ~15″ 1366×768 paysage sous
+Windows, douchette USB (émulation clavier + Enter, cf. useBarcodeScanner.js). Le mobile
+reste utilisé en rayon (Catalogue) mais n'est plus le cas d'usage premier.
+
+- **Breakpoint pivot : `lg:` (1024px)** = mode POS. En dessous, rendu mobile/rayon
+  (BottomNav + TopBar). Ne pas utiliser `md:` pour une distinction mobile/desktop — ce
+  breakpoint reste libre pour d'autres usages (ex. Card, ProduitFormModal).
+- **NavRail** (Sidebar.jsx) : 88px de large en lg:, pas 240px — toujours décaler le
+  contenu de `lg:ml-[88px]`, jamais `md:ml-60` (ancienne géométrie, supprimée).
+- **Cibles tactiles** : 48px minimum (`h-12`/`w-12`), 56-64px pour les actions
+  fréquentes (`size="pos"` sur Button, ou `h-14`/`h-16` directement). Pas de `hover:`
+  porteur d'info seul — toujours doubler d'un `active:` (aucun survol au doigt).
+- **Scroll interne, jamais la page entière** sur les vues plein écran (Caisse,
+  Historique en lg:) : `lg:h-[100dvh] lg:overflow-hidden` sur le conteneur racine,
+  `.pos-scroll` (scrollbar fine, index.css) sur les zones qui défilent.
+- **AppShell `fullBleed`** : les routes qui gèrent leur propre fond plein écran
+  (Caisse, Historique) sont listées dans `FULL_BLEED_ROUTES` — pas de wrapper
+  max-w/padding à contourner avec des marges négatives.
+- Caisse et Historique dupliquent leur JSX top-level entre bloc mobile (`lg:hidden`)
+  et bloc POS (`hidden lg:flex`) — mêmes states/handlers, deux rendus. Pour du contenu
+  en lecture seule (listes), extraire un helper de rendu partagé (cf.
+  `renderVenteJour`/`renderGroupeGamme` dans Historique.jsx) plutôt que dupliquer le JSX.
 
 ---
 

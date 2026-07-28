@@ -103,10 +103,11 @@ export default function Login() {
                 value={identifiant}
                 onChange={e => setIdentifiant(e.target.value)}
                 placeholder="employe, manager, gérant…"
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume placeholder:text-zinc-400 transition-colors"
+                className="w-full h-14 bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none text-lg text-bitume placeholder:text-zinc-400 transition-colors"
                 required
                 autoComplete="username"
                 autoCapitalize="none"
+                autoFocus
               />
               <p className="font-mono text-[10px] text-zinc-400 mt-1">@panamarket.fr ajouté auto</p>
             </div>
@@ -117,7 +118,7 @@ export default function Login() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Mot de passe"
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume placeholder:text-zinc-400 transition-colors"
+                className="w-full h-14 bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none text-lg text-bitume placeholder:text-zinc-400 transition-colors"
                 required
                 autoComplete="current-password"
               />
@@ -132,7 +133,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 w-full py-3.5 rounded-2xl bg-gradient-to-r from-paname-700 to-paname-500 text-white font-bold tag-street shadow-paname disabled:opacity-60 transition"
+              className="mt-2 w-full h-16 rounded-2xl bg-gradient-to-r from-paname-700 to-paname-500 text-white font-bold tag-street text-base shadow-paname disabled:opacity-60 active:brightness-95 transition"
             >
               {loading ? 'Connexion…' : 'Entrer'}
             </button>

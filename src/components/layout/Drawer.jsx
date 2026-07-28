@@ -8,10 +8,10 @@ import { useAuth } from '../../contexts/AuthContext'
 const DrawerButton = ({ Icon, onClick, children, danger = false }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-3 px-3 py-3 rounded-xl transition text-left ${
+    className={`flex items-center gap-3 px-3 h-12 rounded-xl transition text-left ${
       danger
-        ? 'text-pavillon hover:bg-pavillon/10'
-        : 'text-white/80 hover:bg-white/5 hover:text-white'
+        ? 'text-pavillon active:bg-pavillon/10'
+        : 'text-white/80 active:bg-white/5 active:text-white'
     }`}
   >
     <Icon size={18} strokeWidth={1.8} />
@@ -49,7 +49,7 @@ export const Drawer = ({ open, onClose }) => {
           <button
             onClick={onClose}
             aria-label="Fermer le menu"
-            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white/5 transition"
+            className="w-10 h-10 rounded-lg flex items-center justify-center active:bg-white/5 transition"
           >
             <X size={18} />
           </button>

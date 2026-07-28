@@ -17,7 +17,7 @@ export const TopBar = ({ title = '', onMenuClick }) => (
     <button
       onClick={onMenuClick}
       aria-label="Ouvrir le menu"
-      className="w-10 h-10 rounded-xl flex items-center justify-center text-bitume hover:bg-bitume/5 transition shrink-0"
+      className="w-10 h-10 rounded-xl flex items-center justify-center text-bitume active:bg-bitume/5 transition shrink-0"
     >
       <Menu size={22} strokeWidth={2} />
     </button>

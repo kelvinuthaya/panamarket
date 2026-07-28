@@ -61,7 +61,7 @@ function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, inne
       <button
         onClick={() => onToggleFavori(p.id)}
         className={`absolute top-1 right-1 text-sm leading-none transition-colors ${
-          estFavori ? 'text-eiffel' : 'text-white/20 hover:text-white/40'
+          estFavori ? 'text-eiffel' : 'text-white/20 active:text-white/40'
         }`}
         title={estFavori ? 'Retirer des favoris' : 'Épingler'}
       >
@@ -121,7 +121,7 @@ function LignePanier({ p, qte, mode, onChanger }) {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => onChanger(-1)}
-          className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center hover:bg-white/10"
+          className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center active:bg-white/10"
           aria-label="Retirer un"
         >
           <Minus size={14} />
@@ -233,7 +233,7 @@ function SectionCategorie({ titre, variant = 'default', produits, ouverte, onTog
   const headerCls =
     variant === 'favoris'
       ? 'bg-eiffel/10 border-eiffel/30 text-eiffel'
-      : 'bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10'
+      : 'bg-white/5 border-white/10 text-zinc-300 active:bg-white/10'
 
   return (
     <div className="mb-3">
@@ -936,7 +936,7 @@ export default function Caisse() {
         <button
           onClick={() => setShowConfirmVider(true)}
           disabled={articlesEnPanier.length === 0}
-          className="w-full mt-1.5 py-2 rounded-xl border border-pavillon/40 text-pavillon font-medium text-xs disabled:opacity-30 hover:bg-pavillon/10 transition"
+          className="w-full mt-1.5 h-10 rounded-xl border border-pavillon/40 text-pavillon font-medium text-xs disabled:opacity-30 active:bg-pavillon/10 transition"
         >
           Vider le panier
         </button>
@@ -1139,7 +1139,7 @@ export default function Caisse() {
               </div>
               <button
                 onClick={() => setShowRecap(false)}
-                className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
+                className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 text-white/70 active:bg-white/10"
                 aria-label="Fermer"
               >
                 <X size={18} />
@@ -1172,7 +1172,7 @@ export default function Caisse() {
                           {role === 'gerant' && (
                             <button
                               onClick={() => supprimerTransaction(t.id)}
-                              className="p-1.5 rounded-lg bg-pavillon/20 text-pavillon hover:bg-pavillon/30"
+                              className="w-10 h-10 flex items-center justify-center rounded-lg bg-pavillon/20 text-pavillon active:bg-pavillon/30"
                               aria-label="Supprimer cette transaction"
                             >
                               <Trash2 size={14} />
@@ -1207,7 +1207,7 @@ export default function Caisse() {
               <button
                 onClick={genererRecapTicket}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-white/10 transition"
+                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
               >
                 <Printer size={18} />
                 Ticket caisse 80mm
@@ -1215,7 +1215,7 @@ export default function Caisse() {
               <button
                 onClick={genererPDF}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-white/10 transition"
+                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
               >
                 <FileText size={18} />
                 Générer ticket PDF
@@ -1223,14 +1223,14 @@ export default function Caisse() {
               <button
                 onClick={envoyerEmail}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-paname-700 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-30 hover:bg-paname-900 transition shadow-paname"
+                className="w-full flex items-center justify-center gap-2 bg-paname-700 text-white h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-paname-900 transition shadow-paname"
               >
                 <Mail size={18} />
                 Envoyer par email
               </button>
               <button
                 onClick={() => setShowConfirmCloturer(true)}
-                className="w-full border border-pavillon/40 text-pavillon py-3 rounded-xl text-sm font-semibold hover:bg-pavillon/10 transition"
+                className="w-full border border-pavillon/40 text-pavillon h-12 rounded-xl text-sm font-semibold active:bg-pavillon/10 transition"
               >
                 Clôturer la journée
               </button>
@@ -1262,7 +1262,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setCodeInconnu(null)}
-                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
               >
                 {peutCreerProduit ? 'Ignorer' : 'Fermer'}
               </button>
@@ -1305,7 +1305,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmVider(false)}
-                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
               >
                 Annuler
               </button>
@@ -1337,7 +1337,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmCloturer(false)}
-                className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white hover:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
               >
                 Annuler
               </button>
