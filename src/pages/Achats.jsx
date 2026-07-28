@@ -85,18 +85,18 @@ const ListeCourses = ({
       <Card
         key={p.id}
         variant={statut === 'ok' ? 'default' : statut}
+        onClick={() => toggleCheck(p.id)}
         className={`flex items-center gap-3 ${item.checked ? 'opacity-40' : ''}`}
       >
-        {/* Checkbox circulaire personnalisée */}
-        <button
-          onClick={() => toggleCheck(p.id)}
-          className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition ${
+        {/* Checkbox circulaire — cible tactile 44px, mais toute la carte coche déjà */}
+        <span
+          aria-hidden="true"
+          className={`w-11 h-11 rounded-full border-2 shrink-0 flex items-center justify-center transition ${
             item.checked ? 'bg-paname-700 border-paname-700' : 'border-pavillon bg-transparent'
           }`}
-          aria-label={item.checked ? 'Décocher' : 'Cocher'}
         >
-          {item.checked && <span className="text-white text-[10px] font-bold">✓</span>}
-        </button>
+          {item.checked && <span className="text-white text-sm font-bold">✓</span>}
+        </span>
         <div className="flex-1 min-w-0">
           <p className={`font-display font-bold text-sm text-bitume truncate ${item.checked ? 'line-through' : ''}`}>
             {p.designation}
@@ -106,11 +106,11 @@ const ListeCourses = ({
           </p>
         </div>
         <button
-          onClick={() => supprimerItem(p.id)}
+          onClick={(e) => { e.stopPropagation(); supprimerItem(p.id) }}
           aria-label="Retirer"
-          className="p-1.5 rounded-lg text-zinc-300 hover:text-pavillon hover:bg-pavillon/10 transition shrink-0"
+          className="w-11 h-11 rounded-lg text-zinc-300 active:text-pavillon active:bg-pavillon/10 transition shrink-0 flex items-center justify-center"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </Card>
     )
@@ -139,7 +139,7 @@ const ListeCourses = ({
             AJOUTÉS MANUELLEMENT · {items.length}
           </p>
         )}
-        <div className="flex flex-col gap-2">{items.map(renderItem)}</div>
+        <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3">{items.map(renderItem)}</div>
       </div>
     )
   }
@@ -152,7 +152,7 @@ const ListeCourses = ({
         </p>
         <button
           onClick={() => setModalAjout(true)}
-          className="bg-paname-700 text-white rounded-xl px-3 py-2 tag-street flex items-center gap-1.5 shadow-paname"
+          className="bg-paname-700 text-white rounded-xl h-11 px-4 tag-street flex items-center gap-1.5 shadow-paname active:bg-paname-900 transition"
         >
           + AJOUTER
         </button>
@@ -178,7 +178,7 @@ const ListeCourses = ({
         >
           <button
             onClick={() => setOnglet('reception')}
-            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 py-3.5 rounded-2xl font-bold tag-street shadow-or"
+            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 h-14 rounded-2xl font-bold tag-street shadow-or active:scale-[0.98] transition"
           >
             PASSER À LA RÉCEPTION
             <span className="bg-yellow-950 text-eiffel px-2 py-0.5 rounded-lg tag-street">
@@ -201,15 +201,15 @@ const ListeCourses = ({
       {/* ── Modal "Ajouter un produit" ─────────────────────────────────────── */}
       {modalAjout && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-end"
+          className="fixed inset-0 z-50 bg-black/40 flex items-end lg:items-center lg:justify-center"
           onClick={e => { if (e.target === e.currentTarget) { setModalAjout(false); setRecherche('') } }}
         >
-          <div className="bg-white w-full max-w-2xl mx-auto rounded-t-3xl border-t-2 border-paname-700 flex flex-col max-h-[80vh]">
+          <div className="bg-white w-full max-w-2xl lg:max-w-[560px] mx-auto rounded-t-3xl lg:rounded-3xl border-t-2 lg:border-2 border-paname-700 flex flex-col max-h-[80vh]">
             <div className="flex items-center justify-between px-4 py-4 border-b border-bitume/5 shrink-0">
               <h3 className="font-display font-bold text-bitume">Ajouter un produit</h3>
               <button
                 onClick={() => { setModalAjout(false); setRecherche('') }}
-                className="p-2 rounded-xl bg-bitume/5 text-zinc-500"
+                className="w-10 h-10 rounded-xl bg-bitume/5 text-zinc-500 flex items-center justify-center"
               >
                 <X size={18} />
               </button>
@@ -222,12 +222,12 @@ const ListeCourses = ({
                   placeholder="Rechercher un produit…"
                   value={recherche}
                   onChange={e => setRecherche(e.target.value)}
-                  className="w-full pl-5 pr-4 py-2.5 border-b-2 border-zinc-200 focus:border-paname-700 outline-none text-sm bg-transparent transition-colors"
+                  className="w-full h-12 pl-5 pr-4 border-b-2 border-zinc-200 focus:border-paname-700 outline-none text-sm bg-transparent transition-colors"
                   autoFocus
                 />
               </div>
             </div>
-            <div className="overflow-y-auto flex-1 px-4 pb-6 space-y-2 pt-2">
+            <div className="overflow-y-auto pos-scroll flex-1 px-4 pb-6 space-y-2 pt-2">
               {produitsDisponibles.length === 0 && (
                 <p className="text-center font-mono text-[10px] text-zinc-400 py-8">
                   AUCUN PRODUIT DISPONIBLE
@@ -240,7 +240,7 @@ const ListeCourses = ({
                   <button
                     key={p.id}
                     onClick={() => handleAjouter(p)}
-                    className="w-full text-left flex items-center justify-between bg-white border border-bitume/5 rounded-2xl px-4 py-3 hover:border-paname-700/30 transition-colors"
+                    className="w-full min-h-[56px] text-left flex items-center justify-between bg-white border border-bitume/5 rounded-2xl px-4 py-3 active:border-paname-700/30 transition-colors"
                   >
                     <div className="min-w-0 mr-3">
                       <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
@@ -404,7 +404,7 @@ const Reception = ({
       {/* Bouton scanner */}
       <button
         onClick={() => setScannerOuvert(o => !o)}
-        className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl tag-street mb-4 transition ${
+        className={`w-full h-12 flex items-center justify-center gap-2 rounded-2xl tag-street mb-4 transition active:scale-[0.99] ${
           scannerOuvert
             ? 'bg-zinc-100 border border-zinc-200 text-zinc-600'
             : 'bg-paname-700/10 border border-paname-700/20 text-paname-700'
@@ -441,7 +441,7 @@ const Reception = ({
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-3">
           {receptionItems.map(item => {
             const vientDeLaListe = listeCourses.some(i => i.produit.id === item.produit.id)
             return (
@@ -458,10 +458,10 @@ const Reception = ({
                   </div>
                   <button
                     onClick={() => retirerItem(item.produit.id)}
-                    className="p-1.5 rounded-lg text-zinc-300 hover:text-pavillon hover:bg-pavillon/10 shrink-0 transition"
+                    className="w-11 h-11 rounded-lg text-zinc-300 active:text-pavillon active:bg-pavillon/10 shrink-0 transition flex items-center justify-center"
                     aria-label="Retirer"
                   >
-                    <X size={14} />
+                    <X size={16} />
                   </button>
                 </div>
 
@@ -473,14 +473,14 @@ const Reception = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateQty(item.produit.id, item.qtRecue - 1)}
-                        className="border border-bitume/10 bg-bitume/5 text-bitume rounded-xl w-9 h-9 text-lg font-bold flex items-center justify-center"
+                        className="border border-bitume/10 bg-bitume/5 text-bitume rounded-xl w-12 h-12 text-lg font-bold flex items-center justify-center active:bg-bitume/10"
                       >−</button>
                       <span className="flex-1 text-center font-mono text-sm font-bold text-bitume tabular">
                         {item.qtRecue}
                       </span>
                       <button
                         onClick={() => updateQty(item.produit.id, item.qtRecue + 1)}
-                        className="border border-paname-700 bg-paname-700/10 text-paname-700 rounded-xl w-9 h-9 text-lg font-bold flex items-center justify-center"
+                        className="border border-paname-700 bg-paname-700/10 text-paname-700 rounded-xl w-12 h-12 text-lg font-bold flex items-center justify-center active:bg-paname-700/20"
                       >+</button>
                     </div>
                   </div>
@@ -495,7 +495,7 @@ const Reception = ({
                       value={item.dlc}
                       onChange={e => updateDlc(item.produit.id, formatDLC(e.target.value))}
                       placeholder="JJ/MM/AAAA"
-                      className={`w-full border-b-2 outline-none py-2 text-sm bg-transparent transition-colors ${
+                      className={`w-full h-12 border-b-2 outline-none text-sm bg-transparent transition-colors ${
                         isDLCValide(item.dlc)
                           ? 'border-zinc-200 focus:border-paname-700'
                           : 'border-pavillon bg-pavillon/5'
@@ -521,7 +521,7 @@ const Reception = ({
           <button
             onClick={validerAchats}
             disabled={validating || receptionItems.some(i => !isDLCValide(i.dlc))}
-            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 py-3.5 rounded-2xl font-bold tag-street shadow-or disabled:opacity-50"
+            className="w-full max-w-2xl mx-auto flex items-center justify-center gap-2 bg-eiffel text-yellow-950 h-14 rounded-2xl font-bold tag-street shadow-or disabled:opacity-50 active:scale-[0.98] transition"
           >
             {validating ? (
               <><Loader2 size={16} className="animate-spin" /> VALIDATION…</>
@@ -575,7 +575,7 @@ const Reception = ({
                     type="text"
                     value={formCreation.code}
                     readOnly
-                    className="w-full border-b-2 border-zinc-100 py-2 text-sm bg-zinc-50 text-zinc-400 font-mono outline-none"
+                    className="w-full h-12 border-b-2 border-zinc-100 text-sm bg-zinc-50 text-zinc-400 font-mono outline-none"
                   />
                 </div>
 
@@ -590,7 +590,7 @@ const Reception = ({
                     value={formCreation.designation}
                     onChange={e => setFormCreation(f => ({ ...f, designation: e.target.value }))}
                     placeholder="Ex : Red Bull 250ml"
-                    className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
+                    className="w-full h-12 border-b-2 border-zinc-200 focus:border-paname-700 text-sm outline-none bg-transparent transition-colors"
                   />
                 </div>
 
@@ -600,7 +600,7 @@ const Reception = ({
                   <select
                     value={formCreation.gamme}
                     onChange={e => setFormCreation(f => ({ ...f, gamme: e.target.value }))}
-                    className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
+                    className="w-full h-12 border-b-2 border-zinc-200 focus:border-paname-700 text-sm outline-none bg-transparent transition-colors"
                   >
                     {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
@@ -617,7 +617,7 @@ const Reception = ({
                       value={formCreation.st_min}
                       onChange={e => setFormCreation(f => ({ ...f, st_min: e.target.value }))}
                       placeholder="0"
-                      className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
+                      className="w-full h-12 border-b-2 border-zinc-200 focus:border-paname-700 text-sm outline-none bg-transparent transition-colors"
                     />
                   </div>
                   <div>
@@ -632,7 +632,7 @@ const Reception = ({
                       value={formCreation.pr_vente}
                       onChange={e => setFormCreation(f => ({ ...f, pr_vente: e.target.value }))}
                       placeholder="0.00"
-                      className="w-full border-b-2 border-zinc-200 focus:border-paname-700 py-2 text-sm outline-none bg-transparent transition-colors"
+                      className="w-full h-12 border-b-2 border-zinc-200 focus:border-paname-700 text-sm outline-none bg-transparent transition-colors"
                     />
                   </div>
                 </div>
@@ -650,14 +650,14 @@ const Reception = ({
                 <button
                   type="button"
                   onClick={() => setModalCreation(false)}
-                  className="flex-1 py-3 rounded-xl border border-bitume/10 tag-street text-zinc-500"
+                  className="flex-1 h-12 rounded-xl border border-bitume/10 tag-street text-zinc-500 active:bg-bitume/5 transition"
                 >
                   ANNULER
                 </button>
                 <button
                   type="submit"
                   disabled={savingCreation || offLoading}
-                  className="flex-1 py-3 rounded-xl bg-paname-700 text-white tag-street disabled:opacity-50"
+                  className="flex-1 h-12 rounded-xl bg-paname-700 text-white tag-street disabled:opacity-50 active:bg-paname-900 transition"
                 >
                   {savingCreation ? 'CRÉATION…' : 'CRÉER ET AJOUTER'}
                 </button>
@@ -899,7 +899,7 @@ const Achats = () => {
         </div>
       )}
 
-      <div className="p-4 max-w-2xl mx-auto">
+      <div className="p-4 max-w-2xl lg:max-w-4xl mx-auto">
         {/* Tabs PANAME OS */}
         <div className="mb-5">
           <p className="tag-street text-zinc-400 mb-3">ACHATS</p>
@@ -908,8 +908,8 @@ const Achats = () => {
               <button
                 key={tab}
                 onClick={() => setOnglet(tab)}
-                className={`flex-1 py-2 rounded-xl tag-street transition ${
-                  onglet === tab ? 'bg-paname-700 text-white' : 'text-zinc-500 hover:bg-bitume/5'
+                className={`flex-1 h-12 rounded-xl tag-street transition ${
+                  onglet === tab ? 'bg-paname-700 text-white' : 'text-zinc-500 active:bg-bitume/5'
                 }`}
               >
                 {tab === 'liste'

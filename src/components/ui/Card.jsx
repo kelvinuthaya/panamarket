@@ -7,12 +7,15 @@ const STRIPE_COLORS = {
   ok:      'bg-signal',
 }
 
-export const Card = ({ variant = 'default', children, className = '' }) => {
+export const Card = ({ variant = 'default', children, className = '', onClick }) => {
   const hasStripe = variant !== 'default'
 
   return (
     <div
-      className={`relative bg-white rounded-2xl border border-bitume/5 p-4 overflow-hidden md:transition-all md:duration-200 md:hover:-translate-y-0.5 md:hover:shadow-md ${className}`}
+      onClick={onClick}
+      className={`relative bg-white rounded-2xl border border-bitume/5 p-4 overflow-hidden md:transition-all md:duration-200 md:hover:-translate-y-0.5 md:hover:shadow-md ${
+        onClick ? 'cursor-pointer select-none active:scale-[0.99]' : ''
+      } ${className}`}
     >
       {hasStripe && (
         <div
