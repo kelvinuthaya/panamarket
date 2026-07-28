@@ -116,7 +116,7 @@ export default function Catalogue() {
   }
 
   // Classes communes pour les pastilles (statut + gamme)
-  const pillBase = 'tag-street px-3 py-2 rounded-xl border whitespace-nowrap transition'
+  const pillBase = 'tag-street h-11 px-4 rounded-xl border whitespace-nowrap transition shrink-0'
   const pillInactive = 'bg-white text-zinc-500 border-bitume/10'
 
   return (
@@ -129,7 +129,7 @@ export default function Catalogue() {
           {peutImporter && (
             <Button
               variant="ghost"
-              size="sm"
+              size="md"
               onClick={() => navigate('/dashboard')}
               className="flex items-center gap-1.5"
             >
@@ -140,7 +140,7 @@ export default function Catalogue() {
           {peutModifier && (
             <Button
               variant="primary"
-              size="sm"
+              size="md"
               onClick={ouvrirAjout}
               className="flex items-center gap-1.5"
             >
@@ -159,7 +159,7 @@ export default function Catalogue() {
           placeholder="Rechercher un produit…"
           value={recherche}
           onChange={e => setRecherche(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 bg-white border border-bitume/10 rounded-2xl text-sm outline-none focus:border-paname-700 transition-colors"
+          className="w-full h-12 pl-10 pr-4 bg-white border border-bitume/10 rounded-2xl text-sm outline-none focus:border-paname-700 transition-colors"
         />
       </div>
 
@@ -231,7 +231,7 @@ export default function Catalogue() {
         <select
           value={tri}
           onChange={e => setTri(e.target.value)}
-          className="font-mono text-[11px] text-zinc-500 bg-white border border-bitume/10 rounded-xl px-3 py-2 outline-none focus:border-paname-700 transition-colors"
+          className="font-mono text-[11px] text-zinc-500 bg-white border border-bitume/10 rounded-xl h-11 px-3 outline-none focus:border-paname-700 transition-colors"
         >
           <option value="alpha">A → Z</option>
           <option value="date_asc">Ancien → Récent</option>
@@ -271,8 +271,8 @@ export default function Catalogue() {
                 const stockColor = statut === 'rupture' ? 'text-pavillon' : statut === 'faible' ? 'text-eiffel' : 'text-signal'
                 const dlc = badgeDLC(dlcParProduit[p.id]?.dlc)
                 return (
-                  <tr key={p.id} className="border-t border-zinc-100 hover:bg-zinc-50 transition-colors">
-                    <td className="px-4 py-3 max-w-[220px]">
+                  <tr key={p.id} className="border-t border-zinc-100 active:bg-zinc-50 transition-colors">
+                    <td className="px-4 py-4 max-w-[220px]">
                       <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
                       {dlc && (
                         <p className={`font-mono text-[10px] mt-0.5 ${dlc.cls}`}>
@@ -280,42 +280,42 @@ export default function Catalogue() {
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-400 max-w-[140px] truncate">
+                    <td className="px-4 py-4 font-mono text-xs text-zinc-400 max-w-[140px] truncate">
                       {p.code ?? '—'}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-500">
+                    <td className="px-4 py-4 font-mono text-xs text-zinc-500">
                       {p.gamme}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
                       <span className={`font-mono tabular font-bold text-sm ${stockColor}`}>
                         {p.st_actuel}
                       </span>
                       <span className="font-mono text-[10px] text-zinc-400">/{p.st_min}</span>
                     </td>
-                    <td className="px-4 py-3 font-mono tabular text-sm font-semibold text-bitume text-right whitespace-nowrap">
+                    <td className="px-4 py-4 font-mono tabular text-sm font-semibold text-bitume text-right whitespace-nowrap">
                       {p.pr_vente?.toFixed(2)} €
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-4 text-center">
                       <Badge variant={statut}>
                         {statut === 'rupture' ? 'Rupture' : statut === 'faible' ? 'Insuffisant' : 'En stock'}
                       </Badge>
                     </td>
                     {peutModifier && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 justify-end">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3 justify-end">
                           <button
                             onClick={() => ouvrirModif(p)}
                             aria-label="Modifier"
-                            className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                            className="w-11 h-11 rounded-xl bg-bitume/5 text-bitume active:bg-bitume/10 transition flex items-center justify-center"
                           >
-                            <Pencil size={14} />
+                            <Pencil size={16} />
                           </button>
                           <button
                             onClick={() => setConfirmSupp(p)}
                             aria-label="Supprimer"
-                            className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                            className="w-11 h-11 rounded-xl bg-pavillon/10 text-pavillon active:bg-pavillon/20 transition flex items-center justify-center"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
@@ -329,7 +329,7 @@ export default function Catalogue() {
         {visible < produitsFiltres.length && (
           <button
             onClick={() => setVisible(v => v + 20)}
-            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+            className="w-full h-12 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500 active:bg-bitume/5 transition"
           >
             VOIR PLUS · {produitsFiltres.length - visible} restants
           </button>
@@ -386,16 +386,16 @@ export default function Catalogue() {
                       <button
                         onClick={() => ouvrirModif(p)}
                         aria-label="Modifier"
-                        className="p-2 rounded-xl bg-bitume/5 text-bitume hover:bg-bitume/10 transition"
+                        className="w-11 h-11 rounded-xl bg-bitume/5 text-bitume active:bg-bitume/10 transition flex items-center justify-center"
                       >
-                        <Pencil size={15} />
+                        <Pencil size={16} />
                       </button>
                       <button
                         onClick={() => setConfirmSupp(p)}
                         aria-label="Supprimer"
-                        className="p-2 rounded-xl bg-pavillon/10 text-pavillon hover:bg-pavillon/20 transition"
+                        className="w-11 h-11 rounded-xl bg-pavillon/10 text-pavillon active:bg-pavillon/20 transition flex items-center justify-center"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={16} />
                       </button>
                     </>
                   )}
@@ -407,7 +407,7 @@ export default function Catalogue() {
         {visible < produitsFiltres.length && (
           <button
             onClick={() => setVisible(v => v + 20)}
-            className="w-full py-3 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500"
+            className="w-full h-12 mt-2 rounded-2xl border border-bitume/10 tag-street text-zinc-500 active:bg-bitume/5 transition"
           >
             VOIR PLUS · {produitsFiltres.length - visible} restants
           </button>
@@ -440,13 +440,13 @@ export default function Catalogue() {
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmSupp(null)}
-                className="flex-1 py-3 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume"
+                className="flex-1 h-12 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume active:bg-bitume/5 transition"
               >
                 Annuler
               </button>
               <button
                 onClick={() => supprimer(confirmSupp.id)}
-                className="flex-1 py-3 rounded-xl bg-pavillon text-white text-sm font-semibold shadow-rouge"
+                className="flex-1 h-12 rounded-xl bg-pavillon text-white text-sm font-semibold shadow-rouge active:brightness-90 transition"
               >
                 Supprimer
               </button>

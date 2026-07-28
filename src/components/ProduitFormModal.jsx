@@ -113,7 +113,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
           <h2 className="font-display font-bold text-lg text-bitume">
             {produit?.id ? 'Modifier le produit' : 'Ajouter un produit'}
           </h2>
-          <button onClick={onClose} className="p-2 rounded-xl bg-bitume/5 text-bitume">
+          <button onClick={onClose} className="w-10 h-10 rounded-xl bg-bitume/5 text-bitume flex items-center justify-center">
             <X size={18} />
           </button>
         </div>
@@ -132,7 +132,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                 value={form.designation}
                 onChange={e => setForm(f => ({ ...f, designation: e.target.value }))}
                 placeholder="Ex : Red Bull 250ml"
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
               />
             </div>
 
@@ -141,7 +141,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
               <select
                 value={form.gamme}
                 onChange={e => setForm(f => ({ ...f, gamme: e.target.value }))}
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
               >
                 <option value="" disabled>— Gamme —</option>
                 {GAMMES.map(g => <option key={g} value={g}>{g}</option>)}
@@ -165,12 +165,12 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                     }
                   }}
                   placeholder="Ex : 9002490100070"
-                  className="flex-1 bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors font-mono"
+                  className="flex-1 bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => setScannerOuvert(o => !o)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium shrink-0 transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 h-12 rounded-xl text-sm font-medium shrink-0 transition-colors ${
                     scannerOuvert
                       ? 'bg-zinc-100 text-zinc-600'
                       : 'bg-paname-700/10 border border-paname-700/20 text-paname-700'
@@ -213,7 +213,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                   value={form.st_actuel}
                   onChange={e => setForm(f => ({ ...f, st_actuel: e.target.value }))}
                   placeholder="0"
-                  className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                  className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
                 />
               </div>
               <div>
@@ -225,7 +225,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                   value={form.st_min}
                   onChange={e => setForm(f => ({ ...f, st_min: e.target.value }))}
                   placeholder="0"
-                  className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                  className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
                 />
               </div>
             </div>
@@ -242,7 +242,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                 value={form.pr_vente}
                 onChange={e => setForm(f => ({ ...f, pr_vente: e.target.value }))}
                 placeholder="0.00"
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
               />
             </div>
 
@@ -257,7 +257,7 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
                 value={form.pr_vente_especes}
                 onChange={e => setForm(f => ({ ...f, pr_vente_especes: e.target.value }))}
                 placeholder="0.00"
-                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none py-2 text-bitume text-sm transition-colors"
+                className="w-full bg-transparent border-b-2 border-zinc-200 focus:border-paname-700 outline-none h-12 text-bitume text-sm transition-colors"
               />
               <p className="font-mono text-[10px] text-zinc-400 mt-1.5">
                 Laisser vide si le prix est identique en CB et en espèces.
@@ -277,14 +277,14 @@ export default function ProduitFormModal({ produit, onClose, onSaved }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume"
+              className="flex-1 h-12 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume active:bg-bitume/5 transition"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-paname-700 text-white text-sm font-semibold shadow-paname disabled:opacity-50"
+              className="flex-1 h-14 rounded-xl bg-paname-700 text-white text-sm font-semibold shadow-paname disabled:opacity-50 active:bg-paname-900 transition"
             >
               {saving ? 'Sauvegarde…' : produit?.id ? 'Enregistrer' : 'Ajouter'}
             </button>
