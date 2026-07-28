@@ -9,6 +9,10 @@
   }
   body {
     @apply font-sans bg-calcaire text-bitume;
+    /* Supprime le délai ~300ms avant double-tap-zoom sur écrans tactiles
+       Windows/Chrome — sensible sur la caisse où chaque tap doit répondre
+       immédiatement (validation de vente, steppers +/-). */
+    touch-action: manipulation;
   }
 }
 
@@ -42,6 +46,25 @@
   /* Fade-in de page — appliqué sur le <main> de AppShell, rejoue à chaque montage */
   .page-fade {
     animation: pageFadeIn 220ms ease-out both;
+  }
+
+  /* Scrollbar fine pour les zones de contenu scrollables du mode caisse
+     (grille produits, ticket, listes) — la scrollbar Windows par défaut
+     est large et visuellement lourde sur un écran tactile paysage. */
+  .pos-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.bitume.3') transparent;
+  }
+  .pos-scroll::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .pos-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .pos-scroll::-webkit-scrollbar-thumb {
+    background-color: theme('colors.bitume.3');
+    border-radius: 9999px;
   }
 }
 

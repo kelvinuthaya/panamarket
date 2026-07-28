@@ -1,6 +1,9 @@
-// Sidebar PANAME OS — desktop uniquement (md:)
-// 240px fixe, fond bitume, full height. Contient logo, liens principaux,
-// liens secondaires (filtrés selon rôle), footer utilisateur.
+// NavRail PANAME OS — desktop/POS uniquement (lg:), export nommé Sidebar
+// pour ne pas casser les imports existants (AppShell).
+// 88px fixe (icônes + labels empilés), fond bitume, full height. Rail étroit
+// pensé pour le mode caisse tactile paysage : libère un maximum de largeur
+// pour le contenu (grille produits + ticket) sur un écran 1366px.
+// En dessous de lg: (mobile/rayon), TopBar + BottomNav prennent le relais.
 
 import { NavLink } from 'react-router-dom'
 import {
@@ -23,28 +26,34 @@ const PRIMARY_LINKS = [
   { to: '/dashboard',  label: 'Dashboard',  Icon: BarChart3,     gerantOnly: true },
 ]
 
-const SidebarLink = ({ to, Icon, children }) => (
-  <NavLink
-    to={to}
-    end={to === '/'}
-    className={({ isActive }) =>
-      `flex items-center gap-3 px-3 py-2.5 rounded-xl transition ${
-        isActive
-          ? 'bg-paname-700 text-white font-semibold'
-          : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-      }`
-    }
-  >
-    <Icon size={18} strokeWidth={1.8} />
-    <span className="text-sm">{children}</span>
+// Icône au-dessus du label, empilés — cible tactile ~72px de haut sur
+// toute la largeur du rail (88px). Même logique visuelle que BottomNav
+// (mobile) pour rester cohérent entre les deux modes.
+const NavRailLink = ({ to, Icon, children }) => (
+  <NavLink to={to} end={to === '/'} className="w-full px-2" title={children}>
+    {({ isActive }) => (
+      <div
+        className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl transition select-none ${
+          isActive ? 'bg-paname-700' : 'active:bg-white/10'
+        }`}
+      >
+        <Icon
+          size={24}
+          strokeWidth={isActive ? 2.2 : 1.8}
+          className={isActive ? 'text-white' : 'text-white/60'}
+        />
+        <span className={`tag-street text-center leading-tight ${isActive ? 'text-white' : 'text-white/50'}`}>
+          {children}
+        </span>
+      </div>
+    )}
   </NavLink>
 )
 
 export const Sidebar = () => {
   const { user, role, logout } = useAuth()
-  // estManager : peut éditer le catalogue. estGerant : accès Dashboard + suppressions.
-  const estManager = role === 'manager' || role === 'gerant'
-  const estGerant  = role === 'gerant'
+  // estGerant : accès Dashboard + Historique + suppressions.
+  const estGerant = role === 'gerant'
   // Libellé + couleur selon le rôle réel (3 niveaux)
   const roleLabel = role === 'gerant' ? 'GÉRANT' : role === 'manager' ? 'MANAGER' : 'EMPLOYÉ'
   const roleColor = role === 'gerant' ? 'text-eiffel' : role === 'manager' ? 'text-paname-300' : 'text-white/50'
@@ -52,45 +61,44 @@ export const Sidebar = () => {
   const initiales = (user?.email ?? 'U').slice(0, 2).toUpperCase()
 
   return (
-    <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-60 bg-bitume bg-grain text-white flex-col z-30">
-      {/* Logo + lieu */}
-      <div className="px-5 pt-6 pb-4 border-b border-white/10">
-        <div className="font-display font-bold text-2xl leading-none">Panam'arket</div>
-        <div className="tag-street text-eiffel mt-1">75020 · BELLEVILLE</div>
+    <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-[88px] bg-bitume bg-grain text-white flex-col items-center z-30">
+      {/* Logo compact — la version pleine "Panam'arket" ne tient pas dans 88px */}
+      <div className="w-full pt-5 pb-4 flex flex-col items-center gap-1 border-b border-white/10">
+        <span className="font-display font-bold text-xl leading-none">P'M</span>
+        <span className="tag-street text-eiffel text-[8px]">75020</span>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-1">
+      <nav className="flex-1 w-full overflow-y-auto pos-scroll py-3 flex flex-col items-center gap-1.5">
         {PRIMARY_LINKS
           .filter(({ gerantOnly }) => !gerantOnly || estGerant)
           .map(({ to, label, Icon }) => (
-            <SidebarLink key={to} to={to} Icon={Icon}>
+            <NavRailLink key={to} to={to} Icon={Icon}>
               {label}
-            </SidebarLink>
+            </NavRailLink>
           ))}
       </nav>
 
-      {/* Footer utilisateur — initiales sur gradient paname, rôle en eiffel pour gérant,
-          bouton déconnexion à droite (sinon pas de logout sur desktop) */}
-      <div className="border-t border-white/10 p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-paname-700 to-paname-500 flex items-center justify-center font-display font-bold text-white shrink-0">
+      {/* Footer utilisateur — initiales sur gradient paname (title = email
+          complet au survol souris), rôle en tag-street, logout en dessous
+          (cible 48px, pas de place pour l'email complet à 88px de large). */}
+      <div className="w-full border-t border-white/10 py-3 flex flex-col items-center gap-2">
+        <div
+          className="w-10 h-10 rounded-xl bg-gradient-to-br from-paname-700 to-paname-500 flex items-center justify-center font-display font-bold text-white shrink-0"
+          title={user?.email ?? 'Anonyme'}
+        >
           {initiales}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-white truncate">
-            {user?.email ?? 'Anonyme'}
-          </div>
-          <div className={`tag-street ${roleColor}`}>
-            {roleLabel}
-          </div>
+        <div className={`tag-street ${roleColor}`}>
+          {roleLabel}
         </div>
         <button
           onClick={logout}
           aria-label="Se déconnecter"
           title="Se déconnecter"
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-white/60 hover:bg-pavillon/20 hover:text-pavillon transition shrink-0"
+          className="w-12 h-12 rounded-lg flex items-center justify-center text-white/60 active:bg-pavillon/20 active:text-pavillon transition shrink-0"
         >
-          <LogOut size={16} strokeWidth={1.8} />
+          <LogOut size={20} strokeWidth={1.8} />
         </button>
       </div>
     </aside>

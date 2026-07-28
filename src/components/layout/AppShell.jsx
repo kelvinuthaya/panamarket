@@ -1,6 +1,6 @@
 // AppShell PANAME OS — coquille de l'app pour les écrans authentifiés
-// Mobile  : TopBar (sticky) + main + BottomNav (fixed) + Drawer
-// Desktop : Sidebar (fixed left 240px) + main décalé (md:ml-60)
+// Mobile/rayon (<lg) : TopBar (sticky) + main + BottomNav (fixed) + Drawer
+// POS tactile paysage (lg:) : NavRail (fixed left 88px, cf. Sidebar.jsx) + main décalé
 //
 // min-h-[100dvh] = "dynamic viewport height" — gère la barre Safari iOS
 // qui apparaît/disparaît au scroll (100vh seul casserait la hauteur).
@@ -24,33 +24,42 @@ const ROUTE_TITLES = {
   '/livraison':         'Livraison',
 }
 
+// Pages qui gèrent leur propre fond/padding pleine page (thème dark PANAME OS
+// plein écran) : pas de wrapper max-w/px ici, sinon elles doivent le contourner
+// avec des marges négatives (ancien hack -mx-4 -mt-4 encore visible dans leur
+// historique git).
+const FULL_BLEED_ROUTES = new Set(['/caisse', '/historique'])
+
 export const AppShell = ({ children, title: titleOverride }) => {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
   const title = titleOverride ?? ROUTE_TITLES[location.pathname] ?? "Panam'arket"
+  const fullBleed = FULL_BLEED_ROUTES.has(location.pathname)
 
   return (
     <div className="min-h-[100dvh] bg-calcaire">
-      {/* Desktop : sidebar fixe à gauche */}
+      {/* Mode POS (lg:) : rail de navigation fixe à gauche */}
       <Sidebar />
 
-      {/* Mobile : top bar sticky */}
+      {/* Mobile/rayon (<lg) : top bar sticky */}
       <TopBar title={title} onMenuClick={() => setDrawerOpen(true)} />
 
-      {/* Contenu — décalé de 240px sur desktop pour ne pas passer sous la sidebar */}
+      {/* Contenu — décalé de 88px en lg: pour ne pas passer sous le rail */}
       <main
-        className="md:ml-60 page-fade"
+        className="lg:ml-[88px] page-fade"
         style={{ paddingBottom: 'calc(64px + env(safe-area-inset-bottom))' }}
       >
-        <div className="max-w-5xl mx-auto px-4 pt-4 md:pt-6">
-          {children}
-        </div>
+        {fullBleed ? children : (
+          <div className="max-w-5xl mx-auto px-4 pt-4 lg:pt-6">
+            {children}
+          </div>
+        )}
       </main>
 
-      {/* Mobile : nav fixe en bas */}
+      {/* Mobile/rayon (<lg) : nav fixe en bas */}
       <BottomNav />
 
-      {/* Drawer — visible sur mobile mais marche aussi sur desktop si on l'ouvre */}
+      {/* Drawer — mobile/rayon uniquement (Sidebar a son propre logout en lg:) */}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   )

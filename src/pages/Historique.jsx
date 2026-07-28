@@ -137,7 +137,7 @@ export default function Historique() {
   // RLS bloque déjà l'accès aux données côté serveur ; ceci n'est que la couche UX.
   if (!estGerant) {
     return (
-      <div className="-mx-4 -mt-4 md:-mt-6 bg-bitume min-h-[100dvh] flex items-center justify-center px-6">
+      <div className="bg-bitume min-h-[100dvh] flex items-center justify-center px-6">
         <div className="text-center max-w-sm">
           <p className="tag-street text-pavillon mb-2">ACCÈS RESTREINT</p>
           <p className="font-display text-2xl font-bold text-white mb-3">
@@ -182,7 +182,7 @@ export default function Historique() {
 
   // ── Rendu ──────────────────────────────────────────────────────────────────
   return (
-    <div className="-mx-4 -mt-4 md:-mt-6 bg-bitume text-white min-h-[100dvh]">
+    <div className="bg-bitume text-white min-h-[100dvh]">
       <div className="px-4 pt-4 md:pt-6 pb-12">
 
         {/* ── HEADER ─────────────────────────────────────────────────────── */}

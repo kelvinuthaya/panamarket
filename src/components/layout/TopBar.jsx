@@ -1,4 +1,4 @@
-// TopBar PANAME OS — barre du haut mobile uniquement
+// TopBar PANAME OS — barre du haut mobile/rayon uniquement (<lg)
 // Hauteur = safe-area-inset-top + 56px (la notch iPhone repousse le contenu)
 // Affiche le titre courant + bouton menu burger qui ouvre le Drawer
 
@@ -6,7 +6,7 @@ import { Menu } from 'lucide-react'
 
 export const TopBar = ({ title = '', onMenuClick }) => (
   <header
-    className="md:hidden sticky top-0 z-30 bg-calcaire flex items-center justify-between px-4 border-b border-bitume/5"
+    className="lg:hidden sticky top-0 z-30 bg-calcaire flex items-center justify-between px-4 border-b border-bitume/5"
     style={{
       paddingTop: 'env(safe-area-inset-top)',
       // 56px de contenu visible sous la safe-area

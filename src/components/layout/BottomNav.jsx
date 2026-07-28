@@ -1,4 +1,4 @@
-// BottomNav PANAME OS — mobile uniquement, fixé en bas
+// BottomNav PANAME OS — mobile/rayon uniquement (<lg), fixé en bas
 // 4 onglets : Catalogue / Achats / Caisse / Dashboard
 // padding-bottom INLINE (pas en className) pour respecter env(safe-area-inset-bottom)
 // — Tailwind purgerait une classe arbitraire avec env() en build prod
@@ -28,7 +28,7 @@ export const BottomNav = () => {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-bitume px-3 pt-2"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-bitume px-3 pt-2"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}
     >
       <div className="flex justify-around gap-2">

@@ -173,7 +173,7 @@ const ListeCourses = ({
       {/* Sticky CTA "Passer à la réception" */}
       {nbCoches > 0 && (
         <div
-          className="fixed left-0 right-0 md:left-60 px-4 pb-3"
+          className="fixed left-0 right-0 lg:left-[88px] px-4 pb-3"
           style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
         >
           <button
@@ -515,7 +515,7 @@ const Reception = ({
       {/* Bouton valider — sticky, visible seulement si items présents */}
       {receptionItems.length > 0 && (
         <div
-          className="fixed left-0 right-0 md:left-60 px-4 pb-3"
+          className="fixed left-0 right-0 lg:left-[88px] px-4 pb-3"
           style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
         >
           <button
