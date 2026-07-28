@@ -283,11 +283,12 @@ export default function Caisse() {
   const [horloge, setHorloge] = useState(getHorloge)
   const [visible, setVisible] = useState(20)
 
-  // Favoris persistés en localStorage (Set d'ids)
-  const [favoris, setFavoris] = useState(() => {
-    const saved = localStorage.getItem('caisse_favoris')
-    return saved ? new Set(JSON.parse(saved)) : new Set()
-  })
+  // Favoris = propriété du catalogue (colonne produits.favori), pas du navigateur :
+  // survit à un profil de caisse réinitialisé et se partage entre tous les postes.
+  const favoris = useMemo(
+    () => new Set(produits.filter(p => p.favori).map(p => p.id)),
+    [produits]
+  )
 
   // Sections dépliées — les gammes s'ajoutent automatiquement au premier chargement
   const [sectionOuvertes, setSectionOuvertes] = useState(() => new Set(['favoris']))
@@ -306,7 +307,7 @@ export default function Caisse() {
     async function init() {
       const { data, error } = await supabase
         .from('produits')
-        .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel, st_min')
+        .select('id, code, designation, gamme, pr_vente, pr_vente_especes, st_actuel, st_min, favori')
         .order('designation')
 
       if (!error) {
@@ -498,13 +499,14 @@ export default function Caisse() {
   }, [produits, favoris, ongletActif])
 
   // ── Favoris ────────────────────────────────────────────────────────────────
-  function toggleFavori(id) {
-    setFavoris(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      localStorage.setItem('caisse_favoris', JSON.stringify([...next]))
-      return next
-    })
+  async function toggleFavori(id) {
+    // Optimiste : le tap doit répondre immédiatement, on corrige si le serveur refuse.
+    setProduits(prev => prev.map(p => p.id === id ? { ...p, favori: !p.favori } : p))
+    const { error } = await supabase.rpc('toggle_favori', { pid: id })
+    if (error) {
+      setProduits(prev => prev.map(p => p.id === id ? { ...p, favori: !p.favori } : p))
+      setToast('Erreur — favori non enregistré')
+    }
   }
 
   function toggleSection(gamme) {
