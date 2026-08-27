@@ -66,10 +66,10 @@ src/
 │   └── layout/               # AppShell, Sidebar (= NavRail 88px, mode POS lg:), BottomNav/TopBar (<lg), Drawer
 └── pages/
     ├── Home.jsx              # Accueil, tuiles selon rôle
-    ├── Login.jsx             # Auth Supabase
+    ├── Login.jsx             # Auth Supabase (ex-thème dark PANAME OS, unification vers ambiance claire en cours)
     ├── Catalogue.jsx         # CRUD produits + filtres statut/gamme + badges DLC (manager/gérant pour modif)
     ├── Achats.jsx            # 3 onglets : liste de courses / réception (scan+DLC) / historique livraisons
-    ├── Caisse.jsx            # Panier, prix CB/espèces, transactions immuables, tickets PDF (thème dark PANAME OS)
+    ├── Caisse.jsx            # Panier, prix CB/espèces, transactions immuables, tickets PDF (ex-thème dark PANAME OS, unification vers ambiance claire en cours)
     ├── Historique.jsx        # Journées de caisse passées, périodes jour/semaine/mois/année (gérant)
     └── Dashboard.jsx         # CA, top 5, imports Secure Caisse (gérant, redirige sinon)
 
@@ -183,13 +183,24 @@ sans accents ni majuscules dans AuthContext.
 
 ## Design system
 
-Deux ambiances coexistent :
-- **Pages claires** (Catalogue, Achats, Dashboard) : fond #F9FAFB, cards blanches,
-  border-radius 12-16px, shadows légères.
-- **PANAME OS dark** (Caisse, Historique) : fond `bitume`, accents `eiffel` (jaune),
-  `paname` (vert gradient), `pavillon` (rouge), `signal` (vert), typo `tag-street`.
+**Décision produit confirmée : une seule ambiance claire (calcaire) pour toute l'app.**
+Fond #F9FAFB, cards blanches, border-radius 12-16px, shadows légères — c'est l'ambiance
+cible pour toutes les pages, y compris Caisse et Historique.
 
-- Statuts : vert = ok, orange/eiffel = stock faible, rouge/pavillon = rupture
+L'ancienne identité sombre **PANAME OS** (fond `bitume`, accents `eiffel`/`paname`/
+`pavillon`/`signal`, typo `tag-street`) qui habillait Login, Caisse et Historique est **en
+cours d'unification** vers cette ambiance claire — elle n'est plus la direction à suivre
+pour du nouveau code. Ne pas créer de nouvel écran ni étendre ces tokens dark ; les
+retirer au fil des retouches de Login.jsx/Caisse.jsx/Historique.jsx plutôt que les
+reproduire ailleurs.
+
+**Exception assumée** : la Sidebar (NavRail, Sidebar.jsx) reste en fond sombre, pour la
+lisibilité du logo qui y est intégré.
+
+Éviter les effets décoratifs non systémiques (gradients, ombres colorées « glow ») qui ne
+s'appuient pas sur les tokens Tailwind définis dans tailwind.config.js.
+
+- Statuts : vert = ok, orange = stock faible, rouge = rupture
 - Toasts : sonner (Catalogue, Dashboard, ProduitFormModal) ; Caisse et Achats ont un
   toast local useState — NE PAS importer `toast` de sonner dans ces deux fichiers
   (collision de nom avec le useState local déjà vécue)

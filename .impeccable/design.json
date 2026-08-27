@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-26T00:00:00.000Z",
+  "title": "Design System: Panam'arket",
+  "extensions": {
+    "colorMeta": {
+      "paname-700": { "role": "primary", "displayName": "Bleu Marché", "canonical": "#0040DD", "tonalRamp": ["#001433", "#001F8C", "#002FB8", "#0040DD", "#2557FF", "#5C7FFF", "#A6BBFF", "#DCE7FF"] },
+      "eiffel": { "role": "secondary", "displayName": "Or Signal", "canonical": "#F5C518", "tonalRamp": ["#3D2F00", "#5C4700", "#8A6B00", "#B88F00", "#F5C518", "#F8D452", "#FBE38F", "#FDF2CB"] },
+      "pavillon": { "role": "danger", "displayName": "Rouge Rupture", "canonical": "#FF2D2D", "tonalRamp": ["#3D0000", "#660000", "#990000", "#CC1414", "#FF2D2D", "#FF6B6B", "#FFA3A3", "#FFD6D6"] },
+      "signal": { "role": "success", "displayName": "Vert Validé", "canonical": "#00D670", "tonalRamp": ["#00291A", "#004D30", "#007A4C", "#00A863", "#00D670", "#4CE49A", "#99F0C2", "#CCF8E0"] },
+      "calcaire": { "role": "neutral-bg", "displayName": "Calcaire", "canonical": "#F5F4EE" },
+      "bitume": { "role": "neutral-text", "displayName": "Bitume", "canonical": "#0A0A0F", "tonalRamp": ["#0A0A0F", "#14141C", "#1F1F2C", "#3A3A4A", "#5C5C6E", "#8A8A98", "#BFBFC8", "#EAEAEE"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Titres de page et gros chiffres (CA, stock, prix), toujours avec .tabular sur les chiffres." },
+      "body": { "displayName": "Body", "purpose": "Texte courant, listes, descriptions." },
+      "label": { "displayName": "Label / tag-street", "purpose": "Sur-titres, badges, tabs, libellés contextuels — mono uppercase serré." }
+    },
+    "shadows": [
+      { "name": "glow-bleu", "value": "0 0 0 1px rgba(0,64,221,0.3), 0 8px 32px -4px rgba(0,64,221,0.4)", "purpose": "Bouton primaire, CTA héros." },
+      { "name": "glow-or", "value": "0 0 0 1px rgba(245,197,24,0.3), 0 8px 32px -4px rgba(245,197,24,0.4)", "purpose": "Bouton doré (validation, action gérant)." },
+      { "name": "glow-rouge", "value": "0 0 0 1px rgba(255,45,45,0.3), 0 8px 32px -4px rgba(255,45,45,0.4)", "purpose": "Bouton danger (suppression, alerte)." },
+      { "name": "hover-card", "value": "0 4px 12px rgba(10,10,15,0.08)", "purpose": "Décollement léger d'une card au survol, desktop uniquement." }
+    ],
+    "motion": [
+      { "name": "transition-standard", "value": "all 150ms ease", "purpose": "Transition par défaut sur boutons, cards, liens de nav." },
+      { "name": "press-scale", "value": "transform: scale(0.98)", "purpose": "Retour visuel au tap (active:) sur tout élément tactile, indispensable sans hover." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button Primary",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "CTA principal — validation, action première d'un écran.",
+      "html": "<button class=\"ds-btn-primary\">VALIDER</button>",
+      "css": ".ds-btn-primary { background: #0040DD; color: #FFFFFF; height: 48px; padding: 0 24px; border-radius: 16px; font-weight: 600; border: none; box-shadow: 0 0 0 1px rgba(0,64,221,0.3), 0 8px 32px -4px rgba(0,64,221,0.4); transition: background 150ms ease, transform 150ms ease; } .ds-btn-primary:hover { background: #001F8C; } .ds-btn-primary:active { background: #001F8C; transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: 2px solid #2557FF; outline-offset: 2px; }"
+    },
+    {
+      "name": "Button Ghost",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Action secondaire, discrète.",
+      "html": "<button class=\"ds-btn-ghost\">Annuler</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #0A0A0F; height: 48px; padding: 0 24px; border-radius: 16px; font-weight: 600; border: 2px solid rgba(10,10,15,0.1); transition: background 150ms ease; } .ds-btn-ghost:hover { background: rgba(10,10,15,0.05); } .ds-btn-ghost:active { background: rgba(10,10,15,0.1); }"
+    },
+    {
+      "name": "Badge Rupture",
+      "kind": "chip",
+      "refersTo": "badge-rupture",
+      "description": "Statut critique — stock à zéro.",
+      "html": "<span class=\"ds-badge-rupture\">RUPTURE</span>",
+      "css": ".ds-badge-rupture { display: inline-flex; align-items: center; gap: 6px; background: #FF2D2D; color: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: 6px; }"
+    },
+    {
+      "name": "Card avec statut",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Card produit — bordure gauche colorée signalant le statut, jamais un fond teinté.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-stripe\"></div><div class=\"ds-card-body\"><strong>Lait demi-écrémé 1L</strong><br/><span class=\"ds-card-sub\">3 en stock</span></div></div>",
+      "css": ".ds-card { position: relative; background: #FFFFFF; border: 1px solid rgba(10,10,15,0.05); border-radius: 16px; padding: 16px; overflow: hidden; transition: transform 200ms ease, box-shadow 200ms ease; } .ds-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(10,10,15,0.08); } .ds-card-stripe { position: absolute; top: 0; left: 0; bottom: 0; width: 1px; background: #FF2D2D; } .ds-card-body { padding-left: 8px; font-family: 'Bricolage Grotesque', sans-serif; } .ds-card-sub { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8A8A98; }"
+    },
+    {
+      "name": "StatusDot",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "Pastille de statut 8px avec halo pulsant optionnel — signale un état actif (ex. rupture en cours).",
+      "html": "<span class=\"ds-status-dot\"><span class=\"ds-status-dot-halo\"></span><span class=\"ds-status-dot-core\"></span></span>",
+      "css": ".ds-status-dot { position: relative; display: inline-flex; width: 8px; height: 8px; } .ds-status-dot-halo { position: absolute; inset: 0; border-radius: 9999px; opacity: 0.6; background: #FF2D2D; animation: ds-pulse 1.6s ease-out infinite; } .ds-status-dot-core { position: relative; display: inline-block; width: 8px; height: 8px; border-radius: 9999px; background: #FF2D2D; } @keyframes ds-pulse { 0% { transform: scale(1); opacity: 0.6; } 70%, 100% { transform: scale(2.5); opacity: 0; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le Ticket de Caisse",
+    "overview": "Net et fonctionnel : l'app doit se lire comme un reçu de caisse bien imprimé, pas comme un tableau de bord SaaS générique. Fond clair calcaire partout, chiffres tabulaires parfaitement alignés (prix, stocks, totaux), petites étiquettes mono en majuscules façon code de caisse (tag-street), et une seule vraie zone de couleur : les statuts (rupture, faible, ok) et les actions principales. Rejet visuel confirmé : plus d'écran plein sombre en dehors de la Sidebar (Login, Caisse et Historique quittent leur ancien traitement dark \"PANAME OS\" pour rejoindre cette ambiance claire).",
+    "keyCharacteristics": [
+      "Fond calcaire (#F5F4EE) quasi-partout ; blanc pur réservé aux cards/surfaces posées dessus.",
+      "Une seule exception dark assumée : la Sidebar (NavRail 88px), pour la lisibilité du logo.",
+      "Couleur = signal fonctionnel avant tout (statut, action), jamais décoratif pur.",
+      "Typo mono uppercase serrée (tag-street) pour tous les libellés secondaires/contextuels.",
+      "Chiffres (prix, stock, quantités) toujours en tabular-nums (classe .tabular)."
+    ],
+    "rules": [
+      { "name": "La Règle de la Couleur Rare", "body": "Une seule couleur d'accent forte par écran à la fois (bleu OU or OU rouge OU vert selon le contexte) — ne jamais empiler plusieurs accents saturés côte à côte hors contexte de statut.", "section": "colors" },
+      { "name": "La Règle du Glow Assumé", "body": "Les ombres colorées (shadow-paname, shadow-or, shadow-rouge) sont réservées aux actions principales (CTA héros, bouton de validation) — jamais posées sur un élément décoratif sans fonction.", "section": "colors" },
+      { "name": "La Règle du Chiffre Aligné", "body": "Tout chiffre monétaire ou de quantité affiché dans l'UI utilise .tabular — jamais de chiffres proportionnels sur un prix ou un stock.", "section": "typography" },
+      { "name": "La Règle du Plat-Par-Défaut", "body": "Aucune ombre au repos sur les cards standards ; l'ombre est toujours une réponse à un état (hover, action principale), jamais un décor statique.", "section": "elevation" },
+      { "name": "La Règle de la Bordure Gauche", "body": "Un statut (rupture/faible/ok) se signale par un trait de 1px sur le bord gauche de la card, jamais par un fond ou un contour complet coloré — la surface reste blanche.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do garder le fond calcaire comme fond de page par défaut, y compris sur Login/Caisse/Historique une fois migrés.",
+      "Do utiliser .tabular sur tout chiffre de prix, stock ou quantité.",
+      "Do réserver les ombres colorées (glow) aux actions principales, pas à la décoration.",
+      "Do signaler un statut par une bordure gauche 1px, jamais par un fond plein coloré sur une card.",
+      "Do garantir active: sur tout élément tactile de la caisse, en plus (ou à la place) du hover:."
+    ],
+    "donts": [
+      "Don't recréer un écran plein bg-bitume en dehors de la Sidebar — c'est l'ancien système en cours de retrait.",
+      "Don't ajouter de gradient ou d'ombre colorée qui ne correspond à aucun token de tailwind.config.js.",
+      "Don't mélanger plusieurs accents saturés (bleu + or + rouge) sur un même bloc hors contexte de statuts multiples.",
+      "Don't utiliser une couleur d'accent sur plus de ~10% de la surface d'un écran donné — sa rareté fait sa force."
+    ]
+  }
+}

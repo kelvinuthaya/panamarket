@@ -1,6 +1,6 @@
-// Login PANAME OS — dark mode avec splashes décoratifs + form blanc qui pop
+// Login — ambiance claire calcaire (DESIGN.md), plus de dark ni de splashes décoratifs
 //
-// LOGIQUE PRÉSERVÉE (étape 4 migration) :
+// LOGIQUE PRÉSERVÉE (migration ambiance claire) :
 // - 4 useState : identifiant, password, error, loading
 // - handleSubmit async : email = `${identifiant.trim()}@panamarket.fr`,
 //   supabase.auth.signInWithPassword, gestion erreur identique
@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import logoPanamarket from '../assets/logo-panamarket.png'
 
 export default function Login() {
   const [identifiant, setIdentifiant] = useState('')
@@ -31,74 +32,30 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-[100dvh] bg-bitume flex items-center justify-center px-4 overflow-hidden">
-
-      {/* Splashes SVG décoratifs — 3 coins, opacity faible pour rester en arrière-plan */}
-      <svg
-        className="absolute -top-32 -left-32 w-96 h-96 pointer-events-none"
-        viewBox="0 0 200 200"
-        aria-hidden="true"
-      >
-        <defs>
-          <radialGradient id="splash-rouge" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="#FF2D2D" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#FF2D2D" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="100" fill="url(#splash-rouge)" />
-      </svg>
-
-      <svg
-        className="absolute -bottom-40 -right-32 w-[28rem] h-[28rem] pointer-events-none"
-        viewBox="0 0 200 200"
-        aria-hidden="true"
-      >
-        <defs>
-          <radialGradient id="splash-bleu" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="#2557FF" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#2557FF" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="100" fill="url(#splash-bleu)" />
-      </svg>
-
-      <svg
-        className="absolute top-1/3 -right-24 w-72 h-72 pointer-events-none"
-        viewBox="0 0 200 200"
-        aria-hidden="true"
-      >
-        <defs>
-          <radialGradient id="splash-or" cx="50%" cy="50%">
-            <stop offset="0%" stopColor="#F5C518" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#F5C518" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <circle cx="100" cy="100" r="100" fill="url(#splash-or)" />
-      </svg>
+    <div className="relative min-h-[100dvh] bg-calcaire flex items-center justify-center px-4">
 
       {/* Bloc central */}
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
 
-        {/* Logo + lieu */}
+        {/* Logo + lieu — vrai logo du commerce (remplace le wordmark texte) */}
         <div className="text-center">
-          <h1 className="font-display text-6xl font-bold text-white leading-none">
-            Panam
-            {/* "arket" en italic + gradient bleu→violet via bg-clip-text */}
-            <span className="italic bg-gradient-to-r from-paname-700 to-violet-600 bg-clip-text text-transparent">
-              'arket
-            </span>
-          </h1>
-          <p className="tag-street text-eiffel mt-3">75020 · BELLEVILLE · OS</p>
+          <img
+            src={logoPanamarket}
+            alt="Panam'arket"
+            className="w-full max-w-[280px] mx-auto"
+          />
         </div>
 
         {/* Carte formulaire */}
-        <div className="w-full bg-white rounded-3xl p-6 shadow-paname">
+        <div className="w-full bg-white rounded-3xl border border-bitume/5 p-6">
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
 
             {/* Identifiant — pas de label, juste placeholder + suffixe @panamarket.fr en hint mono
                 (suffixe nécessaire pour que l'user comprenne ce qu'il doit taper) */}
             <div>
+              <label htmlFor="login-identifiant" className="sr-only">Identifiant</label>
               <input
+                id="login-identifiant"
                 type="text"
                 value={identifiant}
                 onChange={e => setIdentifiant(e.target.value)}
@@ -108,12 +65,15 @@ export default function Login() {
                 autoComplete="username"
                 autoCapitalize="none"
                 autoFocus
+                aria-describedby="login-identifiant-hint"
               />
-              <p className="font-mono text-[10px] text-zinc-400 mt-1">@panamarket.fr ajouté auto</p>
+              <p id="login-identifiant-hint" className="font-mono text-[10px] text-zinc-400 mt-1">@panamarket.fr ajouté auto</p>
             </div>
 
             <div>
+              <label htmlFor="login-password" className="sr-only">Mot de passe</label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -125,7 +85,7 @@ export default function Login() {
             </div>
 
             {error && (
-              <p className="text-sm text-pavillon bg-pavillon/10 px-3 py-2 rounded-lg">
+              <p role="alert" className="text-sm text-pavillon bg-pavillon/10 px-3 py-2 rounded-lg">
                 {error}
               </p>
             )}
@@ -141,8 +101,8 @@ export default function Login() {
         </div>
 
         {/* Footer signature */}
-        <p className="font-mono text-[10px] text-white/30 text-center">
-          v1.4.0 · NF 525 ready · Made in 75020
+        <p className="font-mono text-[10px] text-zinc-400 text-center">
+          v1.4.0 · NF 525 ready
         </p>
       </div>
     </div>

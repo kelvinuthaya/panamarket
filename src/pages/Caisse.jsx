@@ -1,4 +1,4 @@
-// Caisse PANAME OS — refonte dark mode (étape 4 migration)
+// Caisse — ambiance claire calcaire (DESIGN.md), plus de dark PANAME OS
 //
 // LOGIQUE PRÉSERVÉE :
 // • State : produits, panier, transactions, recherche, loading, modePaiement,
@@ -47,7 +47,7 @@ const prixApplique = (p, mode) =>
     ? p.pr_vente_especes
     : p.pr_vente
 
-// ── Carte produit (mode browse) — version dark ─────────────────────────────
+// ── Carte produit (mode browse) ────────────────────────────────────────────
 function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, innerRef }) {
   const prix = prixApplique(p, mode)
   const statut     = getStatut(p)
@@ -55,21 +55,22 @@ function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, inne
   return (
     <div
       ref={innerRef}
-      className="relative bg-bitume-2 rounded-xl border border-white/5 px-3 py-2.5"
+      className="relative bg-white rounded-xl border border-bitume/5 px-3 py-2.5"
     >
-      {/* Étoile favori — eiffel si épinglé, blanc dim sinon */}
+      {/* Étoile favori — eiffel si épinglé, gris dim sinon */}
       <button
         onClick={() => onToggleFavori(p.id)}
-        className={`absolute top-1 right-1 text-sm leading-none transition-colors ${
-          estFavori ? 'text-eiffel' : 'text-white/20 active:text-white/40'
+        className={`absolute top-0 right-0 w-11 h-11 flex items-center justify-center text-sm leading-none transition-colors ${
+          estFavori ? 'text-eiffel' : 'text-bitume/20 active:text-bitume/40'
         }`}
+        aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         title={estFavori ? 'Retirer des favoris' : 'Épingler'}
       >
         {estFavori ? '★' : '☆'}
       </button>
 
       <div className="pr-5">
-        <p className="text-sm font-medium text-white truncate">{p.designation}</p>
+        <p className="text-sm font-medium text-bitume truncate">{p.designation}</p>
         <p className="font-mono text-[10px] text-zinc-500">
           {p.pr_vente_especes != null
             ? `${p.pr_vente.toFixed(2)} € CB · ${p.pr_vente_especes.toFixed(2)} € esp`
@@ -85,21 +86,23 @@ function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, inne
           <button
             onClick={() => onChanger(-1)}
             disabled={qte === 0}
-            className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white disabled:opacity-25 active:bg-white/10"
+            className="w-11 h-11 rounded-lg bg-bitume/5 border border-bitume/10 flex items-center justify-center text-bitume disabled:opacity-25 active:bg-bitume/10"
+            aria-label="Retirer un"
           >
             <Minus size={14} />
           </button>
-          <span className="font-display tabular w-5 text-center text-sm font-bold text-white">
+          <span className="font-display tabular w-5 text-center text-sm font-bold text-bitume">
             {qte}
           </span>
           <button
             onClick={() => onChanger(+1)}
-            className="w-8 h-8 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 flex items-center justify-center text-white"
+            className="w-11 h-11 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 flex items-center justify-center text-white"
+            aria-label="Ajouter un"
           >
             <Plus size={14} />
           </button>
         </div>
-        <span className={`text-xs font-semibold tabular ${qte > 0 ? 'text-eiffel' : 'text-white/15'}`}>
+        <span className={`text-xs font-semibold tabular ${qte > 0 ? 'text-eiffel' : 'text-zinc-300'}`}>
           {(qte * prix).toFixed(2)} €
         </span>
       </div>
@@ -111,9 +114,9 @@ function CarteProduit({ p, qte, mode, onChanger, estFavori, onToggleFavori, inne
 function LignePanier({ p, qte, mode, onChanger }) {
   const prix = prixApplique(p, mode)
   return (
-    <div className="bg-bitume-2 rounded-2xl p-3 border border-white/5 flex items-center gap-3">
+    <div className="bg-white rounded-2xl p-3 border border-bitume/5 flex items-center gap-3">
       <div className="flex-1 min-w-0">
-        <p className="font-display font-bold text-sm text-white truncate">{p.designation}</p>
+        <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
         <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
           {prix.toFixed(2)} €/u · TVA 20%
         </p>
@@ -121,17 +124,17 @@ function LignePanier({ p, qte, mode, onChanger }) {
       <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => onChanger(-1)}
-          className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center active:bg-white/10"
+          className="w-11 h-11 rounded-lg bg-bitume/5 border border-bitume/10 text-bitume flex items-center justify-center active:bg-bitume/10"
           aria-label="Retirer un"
         >
           <Minus size={14} />
         </button>
-        <span className="font-display tabular text-lg font-bold w-6 text-center text-white">
+        <span className="font-display tabular text-lg font-bold w-6 text-center text-bitume">
           {qte}
         </span>
         <button
           onClick={() => onChanger(+1)}
-          className="w-8 h-8 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 text-white flex items-center justify-center"
+          className="w-11 h-11 rounded-lg bg-gradient-to-br from-paname-700 to-paname-500 text-white flex items-center justify-center"
           aria-label="Ajouter un"
         >
           <Plus size={14} />
@@ -152,15 +155,16 @@ function CarteProduitPos({ p, qte, mode, onAdd, estFavori, onToggleFavori }) {
   return (
     <button
       onClick={onAdd}
-      className={`relative text-left bg-bitume-2 rounded-xl border px-3 py-3 transition select-none active:scale-[0.97] ${
-        qte > 0 ? 'border-eiffel/50' : 'border-white/5'
+      className={`relative text-left bg-white rounded-xl border px-3 py-3 transition select-none active:scale-[0.97] ${
+        qte > 0 ? 'border-eiffel/50' : 'border-bitume/5'
       }`}
     >
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFavori(p.id) }}
-        className={`absolute top-1 right-1 w-9 h-9 flex items-center justify-center text-base transition-colors ${
-          estFavori ? 'text-eiffel' : 'text-white/20 active:text-white/40'
+        className={`absolute top-0 right-0 w-11 h-11 flex items-center justify-center text-base transition-colors ${
+          estFavori ? 'text-eiffel' : 'text-bitume/20 active:text-bitume/40'
         }`}
+        aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         title={estFavori ? 'Retirer des favoris' : 'Épingler'}
       >
         {estFavori ? '★' : '☆'}
@@ -170,10 +174,10 @@ function CarteProduitPos({ p, qte, mode, onAdd, estFavori, onToggleFavori }) {
           {qte}
         </span>
       )}
-      <p className="text-sm font-medium text-white line-clamp-2 mt-1.5 pr-6 min-h-[2.5rem]">
+      <p className="text-sm font-medium text-bitume line-clamp-2 mt-1.5 pr-6 min-h-[2.5rem]">
         {p.designation}
       </p>
-      <p className="font-mono text-xs text-zinc-400 mt-1">
+      <p className="font-mono text-xs text-zinc-500 mt-1">
         {prix.toFixed(2)} €
       </p>
       <p className={`font-mono text-[10px] mt-0.5 ${stockColor}`}>
@@ -187,20 +191,20 @@ function CarteProduitPos({ p, qte, mode, onAdd, estFavori, onToggleFavori }) {
 function LignePanierPos({ p, qte, mode, onChanger }) {
   const prix = prixApplique(p, mode)
   return (
-    <div className="bg-bitume-3 rounded-xl p-2.5 border border-white/5 flex items-center gap-2">
+    <div className="bg-zinc-50 rounded-xl p-2.5 border border-bitume/5 flex items-center gap-2">
       <div className="flex-1 min-w-0">
-        <p className="font-display font-bold text-sm text-white truncate">{p.designation}</p>
+        <p className="font-display font-bold text-sm text-bitume truncate">{p.designation}</p>
         <p className="font-mono text-[10px] text-zinc-500 mt-0.5">{prix.toFixed(2)} €/u</p>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={() => onChanger(-1)}
-          className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 text-white flex items-center justify-center active:bg-white/10"
+          className="w-12 h-12 rounded-lg bg-white border border-bitume/10 text-bitume flex items-center justify-center active:bg-bitume/5"
           aria-label="Retirer un"
         >
           <Minus size={16} />
         </button>
-        <span className="font-display tabular text-base font-bold w-6 text-center text-white">
+        <span className="font-display tabular text-base font-bold w-6 text-center text-bitume">
           {qte}
         </span>
         <button
@@ -221,19 +225,19 @@ const TabGammePos = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
     className={`shrink-0 h-11 px-4 rounded-xl tag-street whitespace-nowrap transition select-none ${
-      active ? 'bg-paname-700 text-white' : 'bg-white/5 text-zinc-300 active:bg-white/10'
+      active ? 'bg-paname-700 text-white' : 'bg-white border border-bitume/10 text-zinc-600 active:border-paname-700/30'
     }`}
   >
     {children}
   </button>
 )
 
-// ── Section dépliable par catégorie — version dark ─────────────────────────
+// ── Section dépliable par catégorie ────────────────────────────────────────
 function SectionCategorie({ titre, variant = 'default', produits, ouverte, onToggle, renderCarte }) {
   const headerCls =
     variant === 'favoris'
       ? 'bg-eiffel/10 border-eiffel/30 text-eiffel'
-      : 'bg-white/5 border-white/10 text-zinc-300 active:bg-white/10'
+      : 'bg-white border-bitume/10 text-zinc-600 active:bg-zinc-50'
 
   return (
     <div className="mb-3">
@@ -279,7 +283,7 @@ export default function Caisse() {
   const [codeInconnu, setCodeInconnu]         = useState(null)
   const [modalAjoutOuvert, setModalAjoutOuvert] = useState(false)
 
-  // Horloge — décorative uniquement (étape 4 PANAME OS)
+  // Horloge — décorative uniquement
   const [horloge, setHorloge] = useState(getHorloge)
   const [visible, setVisible] = useState(20)
 
@@ -711,7 +715,7 @@ export default function Caisse() {
   // ── Guard ──────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="bg-bitume min-h-[100dvh] flex items-center justify-center">
+      <div className="bg-calcaire min-h-[100dvh] flex items-center justify-center">
         <p className="tag-street text-eiffel">CHARGEMENT…</p>
       </div>
     )
@@ -722,7 +726,7 @@ export default function Caisse() {
   return (
     // Route full-bleed (cf. AppShell FULL_BLEED_ROUTES) : pas de padding à contourner
     // lg: = mode POS, hauteur fixe + pas de scroll de page (scroll interne aux 2 colonnes)
-    <div className="bg-bitume text-white min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden">
+    <div className="bg-calcaire text-bitume min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden">
 
       {/* ── TOAST ─────────────────────────────────────────────────────────────── */}
       {toast && (
@@ -739,7 +743,7 @@ export default function Caisse() {
         <header className="flex items-center justify-between mb-5">
           <div>
             <p className="tag-street text-eiffel">CAISSE · {getMode()}</p>
-            <p className="font-display text-3xl font-bold text-white tabular leading-none mt-1">
+            <p className="font-display text-3xl font-bold text-bitume tabular leading-none mt-1">
               {horloge}
             </p>
           </div>
@@ -759,13 +763,13 @@ export default function Caisse() {
         {/* ── SEARCH + SCAN ───────────────────────────────────────────────────── */}
         <div className="flex gap-2 mb-4">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
             <input
               type="text"
               placeholder="Rechercher un produit…"
               value={recherche}
               onChange={e => setRecherche(e.target.value)}
-              className="w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-500 outline-none focus:border-paname-500 transition-colors"
+              className="w-full pl-10 pr-3 py-3 bg-white border border-bitume/10 rounded-2xl text-bitume placeholder:text-zinc-400 outline-none focus:border-paname-700 transition-colors"
             />
           </div>
           <button
@@ -779,9 +783,9 @@ export default function Caisse() {
 
         {/* ── ZONE CAMÉRA ─────────────────────────────────────────────────────── */}
         {scannerOuvert && (
-          <div className="mb-4 rounded-2xl overflow-hidden border border-white/10 bg-black">
+          <div className="mb-4 rounded-2xl overflow-hidden border border-bitume/10 bg-black">
             <video ref={videoRef} className="w-full" playsInline muted />
-            <p className="text-center font-mono text-[10px] text-zinc-400 py-2 bg-bitume-2 border-t border-white/10">
+            <p className="text-center font-mono text-[10px] text-zinc-500 py-2 bg-white border-t border-bitume/10">
               Pointez la caméra vers le code-barres
             </p>
           </div>
@@ -867,13 +871,13 @@ export default function Caisse() {
       {/* ── FOOTER STICKY (mobile/rayon <lg) ────────────────────────────────────
           fixed + bottom calc(64px + safe-area) pour passer au-dessus de la BottomNav. */}
       <div
-        className="lg:hidden fixed left-0 right-0 z-30 bg-bitume-2 border-t-2 border-eiffel px-4 pt-3 pb-3"
+        className="lg:hidden fixed left-0 right-0 z-30 bg-white border-t-2 border-eiffel px-4 pt-3 pb-3"
         style={{ bottom: 'calc(64px + env(safe-area-inset-bottom))' }}
       >
         {/* Total */}
         <div className="flex items-baseline justify-between mb-3">
           <span className="tag-street text-zinc-500">TOTAL</span>
-          <span className="font-display text-4xl font-bold tabular text-white leading-none">
+          <span className="font-display text-4xl font-bold tabular text-bitume leading-none">
             {totalPanier.toFixed(2)}
             <span className="text-eiffel ml-1">€</span>
           </span>
@@ -886,7 +890,7 @@ export default function Caisse() {
             className={`flex-1 py-2.5 rounded-xl tag-street transition ${
               modePaiement === 'cb'
                 ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
-                : 'bg-white/5 border border-white/10 text-white/60'
+                : 'bg-white border border-bitume/10 text-zinc-600'
             }`}
           >
             💳 CB
@@ -896,7 +900,7 @@ export default function Caisse() {
             className={`flex-1 py-2.5 rounded-xl tag-street transition ${
               modePaiement === 'especes'
                 ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
-                : 'bg-white/5 border border-white/10 text-white/60'
+                : 'bg-white border border-bitume/10 text-zinc-600'
             }`}
           >
             💵 ESPÈCES
@@ -914,7 +918,7 @@ export default function Caisse() {
               value={montantRecu}
               onChange={e => setMontantRecu(e.target.value)}
               placeholder={totalPanier.toFixed(2)}
-              className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-right outline-none focus:border-paname-500 placeholder:text-zinc-500 tabular"
+              className="flex-1 px-3 py-2 bg-white border border-bitume/10 rounded-xl text-bitume text-right outline-none focus:border-paname-700 placeholder:text-zinc-400 tabular"
             />
             {monnaie !== null && (
               <div className="text-right shrink-0">
@@ -953,13 +957,13 @@ export default function Caisse() {
         <div className="flex-1 flex flex-col min-w-0 h-full">
           <div className="flex gap-2 p-4 shrink-0">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Rechercher un produit…"
                 value={recherche}
                 onChange={e => setRecherche(e.target.value)}
-                className="w-full h-12 pl-10 pr-3 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-500 outline-none focus:border-paname-500 transition-colors"
+                className="w-full h-12 pl-10 pr-3 bg-white border border-bitume/10 rounded-2xl text-bitume placeholder:text-zinc-400 outline-none focus:border-paname-700 transition-colors"
               />
             </div>
             <button
@@ -972,9 +976,9 @@ export default function Caisse() {
           </div>
 
           {scannerOuvert && (
-            <div className="mx-4 mb-3 max-w-md rounded-2xl overflow-hidden border border-white/10 bg-black shrink-0">
+            <div className="mx-4 mb-3 max-w-md rounded-2xl overflow-hidden border border-bitume/10 bg-black shrink-0">
               <video ref={videoRef} className="w-full" playsInline muted />
-              <p className="text-center font-mono text-[10px] text-zinc-400 py-2 bg-bitume-2 border-t border-white/10">
+              <p className="text-center font-mono text-[10px] text-zinc-500 py-2 bg-white border-t border-bitume/10">
                 Pointez la douchette ou la caméra vers le code-barres
               </p>
             </div>
@@ -1011,11 +1015,11 @@ export default function Caisse() {
         </div>
 
         {/* ── Colonne droite : ticket (toujours visible, sous le pouce) ────── */}
-        <div className="w-[380px] shrink-0 h-full flex flex-col border-l border-white/10 bg-bitume-2">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+        <div className="w-[380px] shrink-0 h-full flex flex-col border-l border-bitume/10 bg-white">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-bitume/10 shrink-0">
             <div>
               <p className="tag-street text-eiffel">CAISSE · {getMode()}</p>
-              <p className="font-display text-xl font-bold text-white tabular leading-none mt-0.5">
+              <p className="font-display text-xl font-bold text-bitume tabular leading-none mt-0.5">
                 {horloge}
               </p>
             </div>
@@ -1055,7 +1059,7 @@ export default function Caisse() {
           <div className="shrink-0 border-t-2 border-eiffel px-4 pt-3 pb-4">
             <div className="flex items-baseline justify-between mb-3">
               <span className="tag-street text-zinc-500">TOTAL</span>
-              <span className="font-display text-4xl font-bold tabular text-white leading-none">
+              <span className="font-display text-4xl font-bold tabular text-bitume leading-none">
                 {totalPanier.toFixed(2)}
                 <span className="text-eiffel ml-1">€</span>
               </span>
@@ -1067,7 +1071,7 @@ export default function Caisse() {
                 className={`flex-1 h-12 rounded-xl tag-street transition ${
                   modePaiement === 'cb'
                     ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
-                    : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+                    : 'bg-white border border-bitume/10 text-zinc-600 active:border-paname-700/30'
                 }`}
               >
                 💳 CB
@@ -1077,7 +1081,7 @@ export default function Caisse() {
                 className={`flex-1 h-12 rounded-xl tag-street transition ${
                   modePaiement === 'especes'
                     ? 'bg-gradient-to-br from-paname-700 to-paname-500 text-white shadow-paname'
-                    : 'bg-white/5 border border-white/10 text-white/60 active:bg-white/10'
+                    : 'bg-white border border-bitume/10 text-zinc-600 active:border-paname-700/30'
                 }`}
               >
                 💵 ESPÈCES
@@ -1094,7 +1098,7 @@ export default function Caisse() {
                   value={montantRecu}
                   onChange={e => setMontantRecu(e.target.value)}
                   placeholder={totalPanier.toFixed(2)}
-                  className="flex-1 h-11 px-3 bg-white/5 border border-white/10 rounded-xl text-white text-right outline-none focus:border-paname-500 placeholder:text-zinc-500 tabular"
+                  className="flex-1 h-11 px-3 bg-white border border-bitume/10 rounded-xl text-bitume text-right outline-none focus:border-paname-700 placeholder:text-zinc-400 tabular"
                 />
                 {monnaie !== null && (
                   <div className="text-right shrink-0">
@@ -1131,17 +1135,17 @@ export default function Caisse() {
           onClick={e => { if (e.target === e.currentTarget) setShowRecap(false) }}
         >
           <div
-            className="bg-bitume-2 w-full max-h-[85vh] rounded-t-3xl flex flex-col border-t-2 border-eiffel lg:max-w-lg lg:rounded-3xl lg:border-2 lg:max-h-[80vh]"
+            className="bg-white w-full max-h-[85vh] rounded-t-3xl flex flex-col border-2 border-eiffel lg:max-w-lg lg:rounded-3xl lg:max-h-[80vh]"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
-            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-bitume/10 shrink-0">
               <div>
                 <p className="tag-street text-eiffel">RÉCAP DU JOUR</p>
                 <p className="font-mono text-[10px] text-zinc-400 capitalize mt-0.5">{todayFr}</p>
               </div>
               <button
                 onClick={() => setShowRecap(false)}
-                className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5 border border-white/10 text-white/70 active:bg-white/10"
+                className="w-10 h-10 rounded-lg flex items-center justify-center bg-bitume/5 border border-bitume/10 text-zinc-500 active:bg-bitume/10"
                 aria-label="Fermer"
               >
                 <X size={18} />
@@ -1156,10 +1160,10 @@ export default function Caisse() {
               ) : (
                 <>
                   {transactions.map((t, i) => (
-                    <div key={t.id} className="bg-bitume-3 rounded-2xl border border-white/5 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+                    <div key={t.id} className="bg-zinc-50 rounded-2xl border border-bitume/5 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-bitume/5">
                         <div>
-                          <p className="font-display font-bold text-sm text-white">
+                          <p className="font-display font-bold text-sm text-bitume">
                             Vente #{i + 1}
                             <span className="text-zinc-500 font-normal font-mono text-[10px] ml-2">{t.heure}</span>
                           </p>
@@ -1168,13 +1172,13 @@ export default function Caisse() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-display tabular text-base font-bold text-white">
+                          <span className="font-display tabular text-base font-bold text-bitume">
                             {t.total.toFixed(2)} €
                           </span>
                           {role === 'gerant' && (
                             <button
                               onClick={() => supprimerTransaction(t.id)}
-                              className="w-10 h-10 flex items-center justify-center rounded-lg bg-pavillon/20 text-pavillon active:bg-pavillon/30"
+                              className="w-10 h-10 flex items-center justify-center rounded-lg bg-pavillon/10 text-pavillon active:bg-pavillon/20"
                               aria-label="Supprimer cette transaction"
                             >
                               <Trash2 size={14} />
@@ -1205,11 +1209,11 @@ export default function Caisse() {
               )}
             </div>
 
-            <div className="px-4 pt-3 pb-4 border-t border-white/10 space-y-2 shrink-0">
+            <div className="px-4 pt-3 pb-4 border-t border-bitume/10 space-y-2 shrink-0">
               <button
                 onClick={genererRecapTicket}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
+                className="w-full flex items-center justify-center gap-2 border border-bitume/10 text-bitume h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-bitume/5 transition"
               >
                 <Printer size={18} />
                 Ticket caisse 80mm
@@ -1217,7 +1221,7 @@ export default function Caisse() {
               <button
                 onClick={genererPDF}
                 disabled={transactions.length === 0}
-                className="w-full flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-white/10 transition"
+                className="w-full flex items-center justify-center gap-2 border border-bitume/10 text-bitume h-12 rounded-xl text-sm font-semibold disabled:opacity-30 active:bg-bitume/5 transition"
               >
                 <FileText size={18} />
                 Générer ticket PDF
@@ -1244,12 +1248,12 @@ export default function Caisse() {
       {/* ── PRODUIT INCONNU — dialog de proposition ──────────────────────────── */}
       {codeInconnu && !modalAjoutOuvert && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
-          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-eiffel/20 flex items-center justify-center shrink-0">
                 <ScanLine size={20} className="text-eiffel" />
               </div>
-              <h2 className="font-display font-bold text-base text-white">Produit inconnu</h2>
+              <h2 className="font-display font-bold text-base text-bitume">Produit inconnu</h2>
             </div>
             <p className="text-sm text-zinc-400 mb-1">
               Code scanné :
@@ -1264,7 +1268,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setCodeInconnu(null)}
-                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume active:bg-bitume/5 transition"
               >
                 {peutCreerProduit ? 'Ignorer' : 'Fermer'}
               </button>
@@ -1293,12 +1297,12 @@ export default function Caisse() {
       {/* ── CONFIRM : VIDER LE PANIER ─────────────────────────────────────────── */}
       {showConfirmVider && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
-          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-pavillon/20 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-pavillon/10 flex items-center justify-center shrink-0">
                 <AlertTriangle size={20} className="text-pavillon" />
               </div>
-              <h2 className="font-display font-bold text-base text-white">Vider le panier ?</h2>
+              <h2 className="font-display font-bold text-base text-bitume">Vider le panier ?</h2>
             </div>
             <p className="text-sm text-zinc-400 mb-6">
               Les articles du panier en cours seront remis à zéro.
@@ -1307,7 +1311,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmVider(false)}
-                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume active:bg-bitume/5 transition"
               >
                 Annuler
               </button>
@@ -1325,12 +1329,12 @@ export default function Caisse() {
       {/* ── CONFIRM : CLÔTURER LA JOURNÉE ─────────────────────────────────────── */}
       {showConfirmCloturer && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center px-6">
-          <div className="bg-bitume-2 border border-white/10 rounded-3xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-pavillon/20 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-pavillon/10 flex items-center justify-center shrink-0">
                 <AlertTriangle size={20} className="text-pavillon" />
               </div>
-              <h2 className="font-display font-bold text-base text-white">Clôturer la journée ?</h2>
+              <h2 className="font-display font-bold text-base text-bitume">Clôturer la journée ?</h2>
             </div>
             <p className="text-sm text-zinc-400 mb-6">
               L'affichage de la journée repart à zéro et le panier est vidé.
@@ -1339,7 +1343,7 @@ export default function Caisse() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmCloturer(false)}
-                className="flex-1 h-12 rounded-xl border border-white/10 bg-white/5 text-sm font-semibold text-white active:bg-white/10 transition"
+                className="flex-1 h-12 rounded-xl border border-bitume/10 text-sm font-semibold text-bitume active:bg-bitume/5 transition"
               >
                 Annuler
               </button>

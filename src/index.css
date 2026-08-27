@@ -91,3 +91,16 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* Le halo pulsant est purement décoratif (la pastille StatusDot reste visible
+   et colorée sans lui) et le fade de page n'affecte aucune info — les deux
+   peuvent être coupés net sans perte pour les utilisateurs sensibles au mouvement. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-status-pulse {
+    animation: none;
+    opacity: 0;
+  }
+  .page-fade {
+    animation: none;
+  }
+}

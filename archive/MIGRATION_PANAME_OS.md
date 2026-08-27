@@ -1,3 +1,8 @@
+> ⚠️ **Archivé le 2026-08-27.** Ce plan a fait passer Login/Caisse/Historique en dark
+> mode. Décision inverse depuis : toute l'app est repassée en ambiance claire calcaire
+> (sauf la Sidebar). Conservé pour l'historique uniquement — voir `PRODUCT.md` et
+> `DESIGN.md` à la racine pour l'état et la direction actuels.
+
 # 🎨 Migration → PANAME OS
 
 > Plan d'exécution complet. Chaque étape contient un **prompt copy-paste-ready** pour Claude Code, ce qui doit se passer, et comment vérifier. Ordre à respecter.
