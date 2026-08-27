@@ -29,7 +29,7 @@ export default function Home() {
       {/* Header */}
       <div>
         {/* Sur-titre tag-street : même convention de header que les autres pages */}
-        <p className="tag-street text-zinc-400">PANAM'ARKET · 75020</p>
+        <p className="tag-street text-zinc-400">PANAM'ARKET</p>
         <h1 className="font-display font-bold text-2xl text-bitume leading-tight mt-1">
           Bonjour {nom}
         </h1>

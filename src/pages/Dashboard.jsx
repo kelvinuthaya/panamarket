@@ -344,7 +344,7 @@ export default function Dashboard() {
 
         {/* PAGE HEADER */}
         <div>
-          <p className="tag-street text-zinc-400">PANAM'ARKET · 75020</p>
+          <p className="tag-street text-zinc-400">PANAM'ARKET</p>
           <p className="font-display text-3xl font-bold text-bitume">Dashboard</p>
         </div>
 

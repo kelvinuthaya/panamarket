@@ -16,6 +16,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import logoPanamarket from '../../assets/logo-panamarket.png'
 
 const PRIMARY_LINKS = [
   { to: '/',           label: 'Accueil',    Icon: Home          },
@@ -62,10 +63,9 @@ export const Sidebar = () => {
 
   return (
     <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-[88px] bg-bitume bg-grain text-white flex-col items-center z-30">
-      {/* Logo compact — la version pleine "Panam'arket" ne tient pas dans 88px */}
+      {/* Logo compact — vrai logo du commerce, redimensionné pour tenir dans 88px */}
       <div className="w-full pt-5 pb-4 flex flex-col items-center gap-1 border-b border-white/10">
-        <span className="font-display font-bold text-xl leading-none">P'M</span>
-        <span className="tag-street text-eiffel text-[8px]">75020</span>
+        <img src={logoPanamarket} alt="Panam'arket" className="w-14" />
       </div>
 
       {/* Navigation */}

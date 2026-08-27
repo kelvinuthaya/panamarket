@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Variables d'environnement (clés Supabase) — ne jamais committer
+.env
+.env.*
+!.env.example
+
+# Claude Code — permissions locales à la session, pas à partager
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
