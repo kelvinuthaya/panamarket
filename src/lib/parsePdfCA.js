@@ -31,40 +31,39 @@ function grouperParLigne(items) {
     )
 }
 
-// Formt ligne article : "DD/MM designation[qty_collé] qty prix_unit € ..."
-// Le qty est parfois collé à la désignation : "KRONENBOURG 7,2 cane2" → qty=2
-function parseArticleLine(ligne) {
+// Format ligne article : "DD/MM designation[qty collé] prix_unit € total €"
+// La qté n'est plus lue dans le texte : elle fusionne parfois avec la
+// désignation dans le flux pdf.js ("OASIS POMM CASSIS 33CL" + qté "1" →
+// "313" collé) et le cas est indécidable au niveau du texte seul ("313" =
+// "31"+"3" ou "3"+"13" ?). Les colonnes Prix TTC et Total restent toujours
+// propres et séparées : qty = total / prix_unitaire, forcément entier.
+export function parseArticleLine(ligne) {
   const dateMatch = ligne.match(/^(\d{2}\/\d{2})\s+/)
   if (!dateMatch) return null
   const date = dateMatch[1]
   const reste = ligne.slice(dateMatch[0].length)
 
-  const prixMatch = reste.match(/([\d]+[,.]\d{2})\s*€/)
-  if (!prixMatch) return null
+  const montants = [...reste.matchAll(/([\d]+[,.]\d{2})\s*€/g)]
+  if (montants.length < 2) return null
 
-  const avantPrix = reste.slice(0, reste.indexOf(prixMatch[0])).trim()
-  const parts = avantPrix.split(/\s+/)
+  const prixUnitaire = parseFloat(montants[0][1].replace(',', '.'))
+  const total = parseFloat(montants[1][1].replace(',', '.'))
+  if (!(prixUnitaire > 0)) return null
+
+  const ratio = total / prixUnitaire
+  const qty = Math.round(ratio)
+  if (qty <= 0 || Math.abs(ratio - qty) > 0.01) return null
+
+  // Désignation = texte avant le 1er montant, suffixe numérique collé retiré
+  // (cosmétique — la qté ne vient plus de là, cf. commentaire ci-dessus).
+  const avantPrix = reste.slice(0, reste.indexOf(montants[0][0])).trim()
+  const parts = avantPrix.split(/\s+/).filter(Boolean)
   if (parts.length === 0) return null
-  const dernier = parts[parts.length - 1]
+  const dernierSansChiffres = parts[parts.length - 1].replace(/\d+$/, '')
+  const designation = [...parts.slice(0, -1), dernierSansChiffres].filter(Boolean).join(' ').trim()
+  if (!designation) return null
 
-  let qty, designation
-
-  if (/^\d+$/.test(dernier)) {
-    qty = parseInt(dernier, 10)
-    designation = parts.slice(0, -1).join(' ').trim()
-  } else {
-    // qty collé à la fin du dernier mot : "cane2" → qty=2, prefix="cane"
-    const colleMatch = dernier.match(/^(.+?)(\d+)$/)
-    if (!colleMatch) return null
-    qty = parseInt(colleMatch[2], 10)
-    const prefixDesig = colleMatch[1].trim()
-    designation = [...parts.slice(0, -1), prefixDesig].filter(Boolean).join(' ').trim()
-  }
-
-  const prix = parseFloat(prixMatch[1].replace(',', '.'))
-  if (!designation || qty <= 0 || isNaN(prix)) return null
-
-  return { date, designation, qty, prix }
+  return { date, designation, qty, prix: prixUnitaire, total }
 }
 
 export async function parsePdfCA(file) {
@@ -114,21 +113,31 @@ export async function parsePdfCA(file) {
     }
   }
 
-  // --- top5 depuis les lignes articles de toutes les pages ---
+  // --- top5 + nbArticles depuis les lignes articles de toutes les pages ---
+  // nbArticles compte TOUT article (y compris "Divers x%", qui pèse la moitié
+  // du CA) : les exclure serait mensonger pour un compteur d'articles vendus.
+  // Le top5 continue d'exclure Divers/Menu via EXCLUS_RE — c'est voulu.
+  let nbArticles = 0
   const totaux = {}
   for (const ligne of toutesLignes) {
     const art = parseArticleLine(ligne)
-    if (!art || EXCLUS_RE.test(art.designation)) continue
+    if (!art) continue
+    nbArticles += art.qty
+    if (EXCLUS_RE.test(art.designation)) continue
     if (!totaux[art.designation]) {
       totaux[art.designation] = { designation: art.designation, qte: 0, ca: 0 }
     }
     totaux[art.designation].qte += art.qty
-    totaux[art.designation].ca  += art.prix * art.qty
+    totaux[art.designation].ca  += art.total
   }
   const top5 = Object.values(totaux)
     .sort((a, b) => b.qte - a.qte)
     .slice(0, 5)
     .map(p => ({ ...p, ca: parseFloat(p.ca.toFixed(2)) }))
 
-  return { caParJour, top5, nbTransactions, panierMoyen, labelMois }
+  if (Object.keys(caParJour).length === 0) {
+    throw new Error('Aucun CA journalier trouvé — la page "Récapitulatif du mois" est probablement absente de ce PDF')
+  }
+
+  return { caParJour, top5, nbTransactions, panierMoyen, labelMois, nbArticles }
 }
