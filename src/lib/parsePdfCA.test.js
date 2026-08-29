@@ -6,7 +6,7 @@
 // désignation : elle vient de total / prix_unitaire (colonnes toujours propres).
 
 import { describe, it, expect } from 'vitest'
-import { parseArticleLine } from './parsePdfCA'
+import { parseArticleLine, extraireCaParTva } from './parsePdfCA'
 
 describe('parseArticleLine', () => {
   it('déduit qty=1 quand "33CL"+qté fusionnent en "313" dans la désignation', () => {
@@ -32,5 +32,22 @@ describe('parseArticleLine', () => {
 
   it('ignore une ligne dont le ratio total/prix_unitaire n\'est pas entier', () => {
     expect(parseArticleLine("13/01  ARTICLE X  1.23 €  4.56 €")).toBeNull()
+  })
+})
+
+describe('extraireCaParTva', () => {
+  it('extrait les 4 taux et déduplique le bloc répété (détail + récapitulatif)', () => {
+    const blocTva = [
+      'Taux 1 (10.00% )-----=> Total T.T.C. (Euro ): 15.60 € - H.T.(Euro ): 14.18 €',
+      'Taux 2 (20.00% )-----=> Total T.T.C. (Euro ): 419.50 € - H.T.(Euro ): 349.58 €',
+      'Taux 3 (2.00% )-----=> Total T.T.C. (Euro ): 56.00 € - H.T.(Euro ): 54.90 €',
+      'Taux 4 (5.50% )-----=> Total T.T.C. (Euro ): 5044.55 € - H.T.(Euro ): 4781.09 €',
+    ]
+    // Même bloc répété (page récapitulative) — mêmes valeurs
+    const lignes = [...blocTva, ...blocTva]
+
+    expect(extraireCaParTva(lignes)).toEqual({
+      '10.00': 15.60, '20.00': 419.50, '2.00': 56.00, '5.50': 5044.55,
+    })
   })
 })

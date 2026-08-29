@@ -56,7 +56,6 @@ export default function Dashboard() {
   // Métriques mensuelles d'un import PDF (table import_mois) — persistées en
   // base pour survivre à un refresh, contrairement à un simple état React.
   const [importMois, setImportMois] = useState(null)
-  const [donneesCsv, setDonneesCsv] = useState({ caParJour: {}, caParTva: {} })
   const [labelPdf, setLabelPdf]     = useState('')
   const [labelCsv, setLabelCsv]     = useState('')
   const [errImport, setErrImport]   = useState('')
@@ -173,6 +172,7 @@ export default function Dashboard() {
         panier_moyen:    meta.panierMoyen    ?? null,
         nb_articles:     meta.nbArticles     ?? null,
         top5:            meta.top5           ?? null,
+        ca_par_tva:      meta.caParTva       ?? null,
         imported_by:     user?.id            ?? null,
       }, { onConflict: 'source,mois' })
 
@@ -191,7 +191,7 @@ export default function Dashboard() {
       const [{ error: errCa }, { error: errMois }] = await Promise.all([
         saveImportToSupabase(data.caParJour, 'pdf', data.labelMois, meta),
         saveImportMoisToSupabase('pdf', data.labelMois,
-          { ...meta, nbArticles: data.nbArticles, top5: data.top5 }),
+          { ...meta, nbArticles: data.nbArticles, top5: data.top5, caParTva: data.caParTva }),
       ])
       if (errCa || errMois) {
         console.error('Erreur sauvegarde Supabase:', errCa ?? errMois)
@@ -217,17 +217,17 @@ export default function Dashboard() {
     setErrImport('')
     try {
       const data = await parseCsvCA(file)
-      setDonneesCsv(data)
       setLabelCsv(data.labelMois)
 
       // labelMois vient du fichier, pas de moisSelectionne : importer un CSV
       // d'une autre année/mois que celui affiché ne doit pas ranger ses
       // données sur le mauvais mois.
-      const { error } = await saveImportToSupabase(
-        data.caParJour, 'csv', data.labelMois, {}
-      )
-      if (error) {
-        console.error('Erreur sauvegarde Supabase:', error)
+      const [{ error: errCa }, { error: errMois }] = await Promise.all([
+        saveImportToSupabase(data.caParJour, 'csv', data.labelMois, {}),
+        saveImportMoisToSupabase('csv', data.labelMois, { caParTva: data.caParTva }),
+      ])
+      if (errCa || errMois) {
+        console.error('Erreur sauvegarde Supabase:', errCa ?? errMois)
         toast.error('Échec de la sauvegarde de l\'import')
       } else {
         const d = new Date(data.annee, data.mois - 1, 1)
@@ -372,14 +372,17 @@ export default function Dashboard() {
     [produits]
   )
 
-  // Entrées TVA si dispo depuis import CSV
+  // Répartition TVA du mois affiché (import_mois.ca_par_tva), pas de l'état
+  // de session : sinon elle reste figée sur le dernier fichier importé, sur
+  // n'importe quel mois. La priorité pdf > csv vient de la sélection de
+  // importMois plus haut (fetchData).
   const tvaEntries = useMemo(() => {
-    const tva = donneesCsv.caParTva
+    const tva = importMois?.ca_par_tva
     if (!tva || Object.keys(tva).length === 0) return []
     return Object.entries(tva)
       .map(([taux, ca]) => ({ taux, ca }))
       .sort((a, b) => parseFloat(a.taux) - parseFloat(b.taux))
-  }, [donneesCsv])
+  }, [importMois])
 
   if (authLoading || loading) {
     return (

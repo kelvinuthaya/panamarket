@@ -8,6 +8,24 @@ const EXCLUS_RE = /^(divers|menu)/i
 // Dernier montant "X,XX €" ou "X.XX €" en fin de ligne recap journalier
 const RECAP_RE = /^(\d{2}\/\d{2}\/\d{4})\s+.*?([\d]+[,.]\d{2})\s*€\s*$/
 
+// "Taux 2 (20.00% )-----=> Total T.T.C. (Euro ): 419.50 € - H.T.(Euro ): ..."
+const RE_TAUX_TVA = /taux\s*\d+\s*\(\s*([\d.,]+)\s*%\s*\).*?total\s*t\.?t\.?c\.?\s*\([^)]*\)\s*:\s*([\d]+[,.]\d{2})\s*€/i
+
+// Le bloc des 4 taux apparaît deux fois dans le document (bas de la dernière
+// page de détail ET page récapitulative), avec les mêmes valeurs : on garde
+// la 1re occurrence par taux, la 2e ne fait que confirmer le même chiffre.
+export function extraireCaParTva(lignes) {
+  const caParTva = {}
+  for (const ligne of lignes) {
+    const m = ligne.match(RE_TAUX_TVA)
+    if (m) {
+      const taux = m[1].replace(',', '.')
+      if (!(taux in caParTva)) caParTva[taux] = parseFloat(m[2].replace(',', '.'))
+    }
+  }
+  return caParTva
+}
+
 // Groupe les items pdf.js d'une page par ligne visuelle (tolérance ±3px en Y)
 function grouperParLigne(items) {
   const groupes = []
@@ -135,9 +153,11 @@ export async function parsePdfCA(file) {
     .slice(0, 5)
     .map(p => ({ ...p, ca: parseFloat(p.ca.toFixed(2)) }))
 
+  const caParTva = extraireCaParTva(toutesLignes)
+
   if (Object.keys(caParJour).length === 0) {
     throw new Error('Aucun CA journalier trouvé — la page "Récapitulatif du mois" est probablement absente de ce PDF')
   }
 
-  return { caParJour, top5, nbTransactions, panierMoyen, labelMois, nbArticles }
+  return { caParJour, top5, nbTransactions, panierMoyen, labelMois, nbArticles, caParTva }
 }
